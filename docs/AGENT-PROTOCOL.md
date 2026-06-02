@@ -67,7 +67,12 @@ The worst failure isn't two agents touching one file (the lock catches that) —
 it's two agents launched on the same vague prompt quietly building the SAME
 thing in parallel. Guard against it:
 
-- **Announce first.** `announce_intent` now returns a `warning` if a live peer
+- **Claim the work, not just the files.** Check the shared task board
+  (`list_tasks`) before picking up work, then `claim_task` the unit you'll do
+  (pass a `title` to create+claim, or a `task_id` from the board). A peer then
+  *sees* it's taken — the structural fix for duplication. Mark it `done` with
+  `update_task` so dependent tasks unblock. `node cli/tasks.mjs` shows the board.
+- **Announce first.** `announce_intent` also returns a `warning` if a live peer
   in this repo is already on similar work. If you're the **later starter**, you
   yield: narrow your lane (re-announce a distinct sub-task — that clears the
   flag) or `post_message` to split scope. Don't rebuild what they're building.

@@ -3,6 +3,18 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — shared task board
+
+A structural answer to duplicate work, complementing the text-similarity overlap
+detection: agents `claim_task` discrete units of work (atomic claim — exactly one
+winner under a race, like file leases), so a peer *sees* a task is taken rather
+than inferring it. Workspace-scoped board with title dedup, dead-owner
+auto-reclaim, and a `depends_on` list that marks tasks blocked/ready. New MCP
+tools `list_tasks` / `claim_task` / `update_task`, a `cli/tasks.mjs` viewer, and
+tasks surfaced in `get_global_state`. Shipped **without a schema-version bump**
+(additive table, never read by older code) so the live fleet isn't disrupted.
+`+ test/tasks.mjs`.
+
 ## Recent — coordination quality + portability
 
 **Self-healing file locks (warm/cold).** A lease used to block for its full TTL as

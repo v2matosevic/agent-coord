@@ -111,6 +111,7 @@ lib/
   agents.mjs       ensureAgent (upsert+heartbeat), heartbeat, markDead, agentAlive
   leases.mjs       claimFile/releaseFile/peekConflicts, claimResource/releaseResource, enqueue, releaseAllForAgent
   overlap.mjs      duplicate-work detection (task Jaccard) + tiebreaker + advisory throttle/escalation
+  tasks.mjs        shared task board — createTask (dedup) / claimTask (atomic, dead-owner reclaim) / updateTask / listTasks (deps readiness)
   coord-context.mjs midTurnContext() — peer messages + overlap advisory as PostToolUse additionalContext
   activity.mjs     logActivity, getFleet, queueDepth, recentActivity, getGlobalState
   reaper.mjs       reap() + reapThrottled() — GC dead agents / expired leases / stale links; wal_checkpoint
@@ -143,7 +144,8 @@ Data model: see `lib/store.mjs` `SCHEMA`. Key tables — `agents` (id, tool, pid
 repo, branch, task, status, last_heartbeat), `file_leases` (workspace_id, path,
 agent_id, mode, expires_at), `resource_leases`, `lease_queue`, `activity_log`,
 `messages` (workspace-scoped agent-to-agent mailbox) + `message_reads` (per-agent
-read pointer).
+read pointer), `tasks` (workspace-scoped shared task board — owner, status,
+`depends_on`).
 
 ---
 
@@ -163,10 +165,10 @@ cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 setup.ps1                       # (re)install everything, idempotent
 ```
 
-MCP tools (17, in Claude + Codex): whoami, announce_intent, list_active_agents,
+MCP tools (20, in Claude + Codex): whoami, announce_intent, list_active_agents,
 get_global_state, check_conflicts, claim_files, release_files, claim_resource,
 release_resource, log_activity, post_message, read_messages, pending_push_review,
-ask_agent, check_replies, reply, request_yield.
+ask_agent, check_replies, reply, request_yield, list_tasks, claim_task, update_task.
 
 ---
 
@@ -208,8 +210,9 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-16 tests (run isolated via `AGENT_COORD_HOME`): `path-aliasing`, `concurrency`
-(30→1), `cold-lease` (warm blocks, cold self-heals on takeover), `resource`,
+17 tests (run isolated via `AGENT_COORD_HOME`): `path-aliasing`, `concurrency`
+(30→1), `cold-lease` (warm blocks, cold self-heals on takeover), `tasks` (board:
+create/dedup/claim-race/dead-owner-reclaim/deps), `resource`,
 `resource-keyword`, `precommit` (cross-agent vs self),
 `pending-push`, `mcp-smoke` (real MCP client), `liveness` (dead-holder + reap),
 `git-switch` (room invariant), `schema-guard`, `subagent` (distinct ids + sibling
@@ -276,6 +279,14 @@ adopts the published id end-to-end; Codex stays standalone). `cli/doctor.mjs` = 
   by its own guard if it keeps duplicating (escape hatch: announce a distinct
   lane). `request_yield` lets the priority agent ask a peer to stand down instead
   of force-releasing locks or a human kill.
+- **Shared task board (`tasks.mjs` + `cli/tasks.mjs`).** The *structural* version
+  of the above: agents `claim_task` discrete units of work (atomic claim — one
+  winner under a race, like file leases), so a peer simply sees a task is taken
+  rather than relying on text-similarity inference. Workspace-scoped, with title
+  dedup, dead-owner auto-reclaim, and a `depends_on` list that marks a task
+  blocked/ready. Added **without a SCHEMA_VERSION bump** (the table is additive and
+  never read by older code), so the live fleet's long-running v2 MCP servers don't
+  trip the "schema ahead" degraded flag.
 
 ---
 
