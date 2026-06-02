@@ -3,6 +3,19 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — self-learning (digest, hotspot warnings, query_history)
+
+The gated SYSTEM.md §12 step, now that insights proved real signal. The retro
+analysis moved into a shared `lib/insights.mjs` (collision hotspots + path
+history), reused four ways: (1) `cli/insights.mjs` (unchanged terminal output);
+(2) `cli/digest.mjs` writes a DURABLE per-project hotspot record — one regenerated
+markdown file per project in `~/.agent-coord/digests/`, deliberately NOT the
+hand-curated vault or your client repos, high-threshold (`--min-agents`,
+update-not-duplicate); (3) a just-in-time `hotspot` warning on `claim_files` when
+you grab a file 2+ agents have edited recently; (4) a new `query_history` MCP tool
+— who touched a file (exact) or directory (prefix) lately, the distinct agents and
+events the lock wouldn't show. `+ test/insights.mjs`; suite 21/21; 21 MCP tools.
+
 ## Recent — macOS expansion (menu bar, notifications, shell-write guard)
 
 **Menu-bar fleet (SwiftBar/xbar).** The Mac-native counterpart to the VS Code

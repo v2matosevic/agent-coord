@@ -15,6 +15,7 @@ import { reap } from "../lib/reaper.mjs";
 import { pollSessionLink } from "../lib/session-link.mjs";
 import { findOverlappingPeers } from "../lib/overlap.mjs";
 import { createTask, claimTask, updateTask, listTasks } from "../lib/tasks.mjs";
+import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
 import { TOOL_DEFS } from "./tool-defs.mjs";
 
 const short = (id) => String(id).replace(/-\d+$/, "");
@@ -137,14 +138,23 @@ function handle(name, a) {
           .map((p) => ({ path: canon(p), holders: peekConflicts(db, { workspaceId: ws, path: canon(p), agentId }) }))
           .filter((c) => c.holders.length),
       };
-    case "claim_files":
+    case "claim_files": {
+      // Just-in-time self-learning: flag a file as a known multi-agent hotspot so
+      // the claimer reviews for duplicate/contradictory work before editing it.
+      const hot = new Map(collisionHotspots(db, { workspaceId: ws }).map((h) => [h.path, h]));
       return {
         results: (a.paths || []).map((p) => {
           const cp = canon(p);
           const r = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path: cp, mode: a.mode || "exclusive", reason: a.reason });
-          return { path: cp, granted: r.granted, heldBy: r.granted ? null : r.conflict?.agent_id };
+          const out = { path: cp, granted: r.granted, heldBy: r.granted ? null : r.conflict?.agent_id };
+          const h = hot.get(cp);
+          if (h) out.hotspot = `⚠ ${h.agents.length} agents edited this in the last 7d — check for duplicate/contradictory work (query_history for detail).`;
+          return out;
         }),
       };
+    }
+    case "query_history":
+      return pathHistory(db, { workspaceId: ws, path: a.path, windowMs: (Number(a.days) > 0 ? Number(a.days) : 14) * 86400000 });
     case "release_files":
       if (a.paths?.length) a.paths.forEach((p) => releaseFile(db, { agentId, workspaceId: ws, path: canon(p) }));
       else releaseAllForAgent(db, agentId);
