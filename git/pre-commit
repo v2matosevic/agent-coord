@@ -1,0 +1,8 @@
+#!/bin/sh
+# agent-coord (universal cross-agent commit guard) — REFERENCE TEMPLATE.
+# You normally don't edit this by hand: `setup.ps1` (or `cli/install-global.mjs`
+# for all repos / `cli/install-git-hook.mjs` for one repo) generates the real
+# hook with the correct absolute path to YOUR clone. Shown here for reference.
+# Replace /path/to/agent-coord with where you cloned the project.
+node --disable-warning=ExperimentalWarning "/path/to/agent-coord/cli/precommit-check.mjs" || exit 1
+exit 0
