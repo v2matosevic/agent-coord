@@ -3,6 +3,24 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — verified + tuned for macOS
+
+Installed and proven on **macOS (Apple Silicon, Node 24)** via the cross-platform
+`node setup.mjs` path: `doctor` 9/9, full suite 17/17, and a live fleet of
+concurrent Claude sessions with real-commit provenance logging. Two runtime spots
+were Windows-only and now branch on `process.platform` — **Windows behaviour is
+unchanged**:
+- `cli/worktree.mjs` linked a worktree's `node_modules` with `cmd /c mklink /J`
+  (a Windows junction) — on macOS/Linux it now makes a directory **symlink** (same
+  "no multi-GB reinstall" effect), and prints `export PORT=` (zsh/bash) instead of
+  the PowerShell `$env:PORT=` hint.
+- `test/path-aliasing.mjs` fed Windows drive-letter/backslash spellings that are
+  meaningless on POSIX — the §7.2 collapse-to-one-key test is now platform-aware
+  (Windows spellings on win32, POSIX spellings elsewhere).
+
+Identity unification confirmed on macOS: the `claude` process reports `comm=claude`,
+so the `ps`-based `proc-ancestry` (no `/proc`) resolves it — no ghost twins.
+
 ## Recent — shared task board
 
 A structural answer to duplicate work, complementing the text-similarity overlap

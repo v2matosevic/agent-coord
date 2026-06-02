@@ -168,6 +168,9 @@ in the store. See [`DESIGN.md` §9](./DESIGN.md) for the full list.
 
 ---
 
-Platform: developed and proven on **Windows 11 + PowerShell 7** with Claude Code
-and Codex. The core (Node + `node:sqlite` + the hooks/MCP/CLI) is portable;
-`node setup.mjs` runs on macOS/Linux too. Single-user machine by design.
+Platform: developed on **Windows 11 + PowerShell 7** and also installed & proven on
+**macOS (Apple Silicon)** — both with Claude Code and Codex. The core (Node +
+`node:sqlite` + the hooks/MCP/CLI) is portable; `node setup.mjs` runs on
+Windows/macOS/Linux (doctor 9/9, suite 17/17 on macOS). The few Windows-specific
+runtime paths branch on `process.platform`, so each OS keeps its native behaviour.
+Single-user machine by design.
