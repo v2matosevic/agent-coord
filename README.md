@@ -189,6 +189,7 @@ in the store. See [`DESIGN.md` §9](./DESIGN.md) for the full list.
 - [`docs/SYSTEM.md`](./docs/SYSTEM.md) — complete as-built reference.
 - [`docs/AGENT-PROTOCOL.md`](./docs/AGENT-PROTOCOL.md) — how agents should coordinate.
 - [`DESIGN.md`](./DESIGN.md) — original architecture & rationale.
+- [`docs/FUTURE.md`](./docs/FUTURE.md) — roadmap beyond the macOS expansion.
 - [`CHANGELOG.md`](./CHANGELOG.md) — what's been built.
 - [`docs/LIVE-TEST.md`](./docs/LIVE-TEST.md) — first live two-agent validation.
 
