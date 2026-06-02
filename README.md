@@ -83,8 +83,12 @@ node cli/doctor.mjs        # expect: 9/9 checks passed
 - **Talk that reaches heads-down agents.** Agents leave each other messages
   (`post_message`, workspace-scoped). Unread messages surface not just at the next
   prompt but **between tool calls**, so a peer can reach an agent mid-build.
-- **Duplicate-work de-confliction.** Launch two agents on one vague prompt and
-  `announce_intent` warns the later starter that a peer is already on it. The
+- **Shared task board.** Agents `claim_task` discrete units of work (atomic — one
+  winner under a race), so a peer simply *sees* a task is taken instead of two
+  agents building the same thing. Title dedup, dead-owner auto-reclaim, and a
+  `depends_on` list that marks tasks blocked/ready. `node cli/tasks.mjs` shows it.
+- **Duplicate-work de-confliction.** Beyond the board, `announce_intent` warns the
+  later starter that a peer is already on similar work (text-similarity). The
   deterministic tiebreaker (who started first) decides who yields; the later
   starter is advised, then auto-blocked if it keeps duplicating. Ask a peer to
   stand down with `request_yield` instead of fighting locks.
@@ -104,6 +108,7 @@ node cli/doctor.mjs                 # 9-point health check
 node cli/status.mjs                 # one-shot fleet table
 node cli/watch.mjs                  # live fleet in the terminal (2s)
 node cli/dashboard.mjs [port]       # live browser dashboard (default :7777)
+node cli/tasks.mjs                  # shared task board (--add "title" | --done <id>)
 node cli/worktree.mjs new           # isolate an agent: own worktree + branch + port
 node cli/insights.mjs [--since 7d]  # retro: files edited by 2+ agents + conflicts
 node cli/pending-push.mjs           # who authored the unpushed commits + push verdicts
@@ -116,7 +121,8 @@ All CLIs run under `node --disable-warning=ExperimentalWarning <script>`.
 `whoami`, `announce_intent`, `list_active_agents`, `get_global_state`,
 `check_conflicts`, `claim_files`, `release_files`, `claim_resource`,
 `release_resource`, `log_activity`, `post_message`, `read_messages`,
-`pending_push_review`, `ask_agent`, `check_replies`, `reply`, `request_yield`.
+`pending_push_review`, `ask_agent`, `check_replies`, `reply`, `request_yield`,
+`list_tasks`, `claim_task`, `update_task`.
 
 ## VS Code extension (optional)
 

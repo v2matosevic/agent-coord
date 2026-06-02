@@ -39,8 +39,10 @@ try {
   const ask = await call("ask_agent", { to: "nobody-home", question: "ready to push?" });
   console.log("ask_agent:     ", JSON.stringify(ask));
   console.log("check_replies: ", JSON.stringify(await call("check_replies", { ask_id: ask.ask_id })));
+  console.log("claim_task:    ", JSON.stringify(await call("claim_task", { title: "demo: wire the thing" })));
+  console.log("list_tasks:    ", JSON.stringify((await call("list_tasks")).tasks.map((t) => `${t.task_id}:${t.status}`)));
 
-  const expected = ["whoami", "announce_intent", "claim_files", "list_active_agents", "get_global_state", "check_conflicts", "release_files", "claim_resource", "release_resource", "log_activity", "post_message", "read_messages", "pending_push_review", "ask_agent", "check_replies", "reply", "request_yield"];
+  const expected = ["whoami", "announce_intent", "claim_files", "list_active_agents", "get_global_state", "check_conflicts", "release_files", "claim_resource", "release_resource", "log_activity", "post_message", "read_messages", "pending_push_review", "ask_agent", "check_replies", "reply", "request_yield", "list_tasks", "claim_task", "update_task"];
   const haveAll = expected.every((t) => tools.includes(t));
   console.log(haveAll ? "PASS ✅ MCP server speaks the protocol; tools work" : "FAIL ❌ missing tools: " + expected.filter((t) => !tools.includes(t)));
   failed = !haveAll;

@@ -95,4 +95,21 @@ export const TOOL_DEFS = [
       "Ask a specific peer to STAND DOWN because you're already doing that work (the clean alternative to force-releasing their locks or having the human kill them). They hear it mid-turn; if they agree they release their files and stop. Use when you and a peer are provably duplicating and you started first / have the verified version.",
     inputSchema: { type: "object", properties: { to: { type: "string" }, reason: { type: "string" } }, required: ["to"] },
   },
+  {
+    name: "list_tasks",
+    description:
+      "Show the shared task board for THIS repo: every task, who owns it (and if they're still live), status (open/claimed/done/blocked), and dependency readiness. Check this before picking work so you don't duplicate a peer.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "claim_task",
+    description:
+      "Claim a unit of work so peers know it's yours — the structural way to avoid two agents building the same thing. Pass `title` to create+claim a new task (deduped against existing titles), or `task_id` to claim an existing one from list_tasks. Fails if a LIVE peer already owns it. Optional `depends_on` (task ids) records ordering.",
+    inputSchema: { type: "object", properties: { title: { type: "string" }, task_id: { type: "string" }, detail: { type: "string" }, depends_on: { type: "array", items: { type: "string" } } } },
+  },
+  {
+    name: "update_task",
+    description: "Update a task you're working: status one of open|claimed|done|blocked ('open' also releases it), and/or set detail. Mark it 'done' so dependent tasks unblock.",
+    inputSchema: { type: "object", properties: { task_id: { type: "string" }, status: { type: "string", enum: ["open", "claimed", "done", "blocked"] }, detail: { type: "string" } }, required: ["task_id"] },
+  },
 ];

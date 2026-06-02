@@ -14,6 +14,7 @@ import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { pollSessionLink } from "../lib/session-link.mjs";
 import { findOverlappingPeers } from "../lib/overlap.mjs";
+import { createTask, claimTask, updateTask, listTasks } from "../lib/tasks.mjs";
 import { TOOL_DEFS } from "./tool-defs.mjs";
 
 const short = (id) => String(id).replace(/-\d+$/, "");
@@ -158,6 +159,27 @@ function handle(name, a) {
     case "log_activity":
       logActivity(db, { agentId, workspaceId: ws, event: a.event, detail: a.detail });
       return { ok: true };
+    case "list_tasks":
+      return { tasks: listTasks(db, { workspaceId: ws }) };
+    case "claim_task": {
+      let taskId = a.task_id;
+      let created = false;
+      if (!taskId && a.title) {
+        const c = createTask(db, { workspaceId: ws, title: a.title, detail: a.detail, dependsOn: a.depends_on, createdBy: agentId });
+        taskId = c.taskId;
+        created = c.created;
+      }
+      if (!taskId) return { ok: false, error: "pass task_id (claim an existing task) or title (create + claim a new one)" };
+      const r = claimTask(db, { taskId, agentId });
+      if (!r.granted) return { ok: false, taskId, heldBy: r.conflict?.owner, error: r.error || `already claimed by ${r.conflict?.owner} — pick another task or coordinate` };
+      logActivity(db, { agentId, workspaceId: ws, event: "task-claim", detail: taskId });
+      return { ok: true, taskId, note: created ? "created + claimed" : "claimed an existing task — a peer may have created it, check the board" };
+    }
+    case "update_task": {
+      const r = updateTask(db, { taskId: a.task_id, agentId, status: a.status, detail: a.detail });
+      if (r.ok) logActivity(db, { agentId, workspaceId: ws, event: "task-update", detail: `${a.task_id} ${a.status || ""}`.trim() });
+      return r;
+    }
     default:
       throw new Error(`unknown tool: ${name}`);
   }
