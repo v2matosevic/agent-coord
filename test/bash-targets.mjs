@@ -24,8 +24,12 @@ t("cp dist/a.js dist/b.js", ["dist/b.js"]);
 t("mv old.txt sub/new.txt", ["sub/new.txt"]);
 t("touch a.txt b.txt", ["a.txt", "b.txt"]);
 t("cmd | tee -a out.log", ["out.log"]);
+t("sed -i -e 1d file.txt", ["file.txt"]); // -e: the script is the flag's arg, not a file
+t("sed -i d notes.log", ["notes.log"]); // no -e: first positional is the script, dropped
 
 // false-positive guards
+t("cat <<EOF > out.txt\nrm > evil.txt\nEOF", ["out.txt"]); // heredoc body is data, not commands
+t("sed -i p config.json", ["config.json"]); // 'p' is a sed script, not a file
 t('echo "use > inside a string" hello', []); // quoted > is literal
 t('git commit -m "fix > the bug"', []); // commit message, not a redirect
 t("ls -la && grep foo src/app.js", []); // read-only

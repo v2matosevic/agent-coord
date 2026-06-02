@@ -58,8 +58,9 @@ try {
 
     // Shell file mutations (sed -i / > / >> / tee / cp / mv / touch) bypass the
     // Write/Edit guard. Claim each target the command would write, blocking only
-    // on a warm live peer — same self-healing guarantee as a normal edit.
-    for (const path of detectWriteTargets(command, repoRoot)) {
+    // on a warm live peer — same self-healing guarantee as a normal edit. Only in
+    // a real repo (a room) — outside git there's nothing meaningful to contend on.
+    for (const path of repoRoot ? detectWriteTargets(command, repoRoot) : []) {
       const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: "bash-write" });
       if (!res.granted) {
         enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
