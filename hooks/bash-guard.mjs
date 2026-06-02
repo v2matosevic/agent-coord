@@ -3,11 +3,15 @@ import { resolveAgentId } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded } from "../lib/store.mjs";
 import { ensureAgent } from "../lib/agents.mjs";
-import { claimResource } from "../lib/leases.mjs";
+import { claimResource, claimFile, enqueue } from "../lib/leases.mjs";
 import { logActivity } from "../lib/activity.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { detectResources } from "../lib/resource-rules.mjs";
+import { detectWriteTargets } from "../lib/bash-targets.mjs";
 import { writeCommitterMarker } from "../lib/committer.mjs";
+import { notify } from "../lib/notify.mjs";
+
+const short = (id) => String(id).replace(/-\d+$/, "");
 
 // PreToolUse on Bash: claim machine-wide singletons (dev port / dev DB / deploy)
 // the command would touch, blocking with exit 2 if another live agent holds one.
@@ -50,6 +54,24 @@ try {
         process.exit(2);
       }
       logActivity(db, { agentId, workspaceId: ws, event: "resource-claim", detail: r.resourceId });
+    }
+
+    // Shell file mutations (sed -i / > / >> / tee / cp / mv / touch) bypass the
+    // Write/Edit guard. Claim each target the command would write, blocking only
+    // on a warm live peer — same self-healing guarantee as a normal edit.
+    for (const path of detectWriteTargets(command, repoRoot)) {
+      const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: "bash-write" });
+      if (!res.granted) {
+        enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
+        logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });
+        notify({ title: "⛔ agent-coord — blocked (shell)", message: `"${path}" is held by ${short(res.conflict.agent_id)}.`, key: `block:${path}`, sound: true });
+        process.stderr.write(
+          `⛔ agent-coord: this command writes "${path}", held by ${short(res.conflict.agent_id)} (${res.conflict.current_task || "working"}). ` +
+            `It auto-frees when they move on — wait, target another file, or post_message to coordinate. Don't force it.\n`,
+        );
+        process.exit(2);
+      }
+      logActivity(db, { agentId, workspaceId: ws, event: "claim", detail: path });
     }
   }
   process.exit(0);

@@ -3,6 +3,31 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — macOS expansion (menu bar, notifications, shell-write guard)
+
+**Menu-bar fleet (SwiftBar/xbar).** The Mac-native counterpart to the VS Code
+Fleet panel: a read-only renderer (`cli/macos-menubar.mjs`) prints the live fleet
+in menu-bar format — agent count (🟢/🔴/⚠️), agents grouped by repo with the file
+each holds, contended files, resource leases, task-board count, dashboard link.
+`cli/install-macos-menubar.mjs` generates a bash stub that resolves node from the
+fnm default alias / Homebrew (GUI apps get a minimal PATH) and installs it into the
+SwiftBar/xbar plugin folder if present. `setup.mjs` runs it on macOS.
+
+**Native desktop notifications.** Reach the heads-down *human* with what the layer
+already tells heads-down *agents*: `lib/notify.mjs` fires macOS banners (terminal-
+notifier if present, else osascript) when you're blocked on a file, a peer messages
+you, or asks you to yield. Non-blocking (detached) and fail-safe so it can never
+delay a hook; same-key alerts deduped within a 30s file-backed throttle. On by
+default on macOS (`AGENT_COORD_NOTIFY=0` mutes). `+ test/notify.mjs`.
+
+**Shell-write guard.** Closes the documented gap where `sed -i`, `>`/`>>`, `tee`,
+`cp`/`mv`, `touch` mutate a repo file without going through Write/Edit. A quote-aware
+tokenizer (`lib/bash-targets.mjs`) extracts the files a Bash command would write —
+biased to false negatives, ignoring quoted `>`, file descriptors, `/dev/*`, and
+out-of-repo paths — and the Bash guard claims each, blocking only on a warm live
+peer (same self-healing guarantee as a normal edit). `+ test/bash-targets.mjs,
+test/bash-guard-block.mjs`.
+
 ## Recent — verified + tuned for macOS
 
 Installed and proven on **macOS (Apple Silicon, Node 24)** via the cross-platform
