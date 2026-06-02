@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { getDb, DEGRADED_FLAG } from "../lib/store.mjs";
 import { getGlobalState } from "../lib/activity.mjs";
+import { workspaceId } from "../lib/path-canon.mjs";
 
 // SwiftBar / xbar plugin renderer for agent-coord — the Mac-native counterpart to
 // the Windows VS Code "Fleet" panel. Prints the live fleet in menu-bar format:
@@ -37,9 +38,12 @@ try {
     if (!byPath.has(k)) byPath.set(k, new Set());
     byPath.get(k).add(l.agent_id);
   }
-  const conflicts = [...byPath.entries()].filter(([, s]) => s.size > 1).map(([k]) => k.split("||")[1]);
+  // Keep the full workspace||path key so the same filename in two repos isn't
+  // cross-flagged; derive bare paths only for the display section.
+  const conflictKeys = new Set([...byPath.entries()].filter(([, s]) => s.size > 1).map(([k]) => k));
+  const conflicts = [...conflictKeys].map((k) => k.split("||")[1]);
   const waiting = (state.queue || []).filter((q) => q.kind === "file").length;
-  const contended = conflicts.length > 0 || waiting > 0;
+  const contended = conflictKeys.size > 0 || waiting > 0;
 
   // --- menu-bar title ---
   if (degraded) p(`⚠️ coord | color=orange`);
@@ -66,7 +70,7 @@ try {
       for (const a of list) {
         const sym = a.tool === "codex" ? "diamond.fill" : "circle.fill";
         const det = a.editing ? `  ⚙ ${trunc(a.editing, 34)}` : a.current_task ? `  “${trunc(a.current_task, 32)}”` : "";
-        const onConflict = a.editing && conflicts.includes(a.editing);
+        const onConflict = a.editing && a.repo_path && conflictKeys.has(workspaceId(a.repo_path) + "||" + a.editing);
         p(`${short(a.agent_id)}${det} | size=13 sfimage=${sym}${onConflict ? ` color=${RED}` : ""}`);
       }
     }

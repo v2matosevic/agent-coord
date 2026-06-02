@@ -14,6 +14,8 @@ writeTxn(db, () => {
   ins.run(nowIso(), "beta-1", ws, "edit", "src/app.js"); // 2 distinct agents -> hotspot
   ins.run(nowIso(), "beta-1", ws, "edit", "/repo/proj/src/app.js"); // absolute spelling normalizes
   ins.run(nowIso(), "alpha-1", ws, "edit", "src/solo.js"); // 1 agent -> not a hotspot
+  ins.run(nowIso(), "alpha-1", ws, "edit", "/repo/proj"); // edit logged against repo root
+  ins.run(nowIso(), "beta-1", ws, "edit", "/repo/proj"); // -> normalizes to "" -> must be skipped
 });
 
 let ok = true;
@@ -27,6 +29,7 @@ const app = hot.find((h) => h.path === "src/app.js");
 check(!!app, "src/app.js flagged as a hotspot");
 check(app && app.agents.length === 2, "hotspot counts 2 distinct agents (absolute spelling merged)");
 check(!hot.find((h) => h.path === "src/solo.js"), "single-agent file is NOT a hotspot");
+check(!hot.find((h) => !h.path), "a root edit (empty relative path) is not a hotspot");
 
 const hist = pathHistory(db, { workspaceId: ws, path: "src/app.js" });
 check(hist.distinctAgents.length === 2 && hist.distinctAgents.includes("alpha-1") && hist.distinctAgents.includes("beta-1"), "query_history returns both agents for the file");
