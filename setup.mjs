@@ -43,5 +43,10 @@ if (has("codex")) {
 console.log("\n[6/6] health check");
 sh([NODE, FLAG, join(ROOT, "cli", "doctor.mjs")]);
 
+if (process.platform === "darwin") {
+  console.log("\n[macOS] menu-bar fleet plugin (SwiftBar/xbar)");
+  sh([NODE, FLAG, join(ROOT, "cli", "install-macos-menubar.mjs")]);
+}
+
 console.log("\nDone. Open NEW agent sessions/terminals to pick it up.");
 console.log("Verify any time:  node", q(join(ROOT, "cli", "doctor.mjs")));
