@@ -48,9 +48,16 @@ if (cmd === "new") {
 
   let nm = "skipped (main has no node_modules)";
   if (existsSync(join(repo, "node_modules"))) {
+    const src = join(repo, "node_modules");
+    const dst = join(wtPath, "node_modules");
     try {
-      execFileSync("cmd", ["/c", "mklink", "/J", join(wtPath, "node_modules"), join(repo, "node_modules")], { stdio: "ignore" });
-      nm = "junctioned from main (no reinstall)";
+      if (process.platform === "win32") {
+        execFileSync("cmd", ["/c", "mklink", "/J", dst, src], { stdio: "ignore" }); // junction
+        nm = "junctioned from main (no reinstall)";
+      } else {
+        symlinkSync(src, dst, "dir"); // macOS/Linux: dir symlink — same effect, no multi-GB reinstall
+        nm = "symlinked from main (no reinstall)";
+      }
     } catch {
       nm = "FAILED — run `npm ci` in the worktree";
     }
@@ -76,7 +83,8 @@ if (cmd === "new") {
   envNotes.forEach((n) => console.log(`  ${n}`));
   console.log("\n  next:");
   console.log(`    cd "${disp(wtPath)}"`);
-  console.log(`    $env:PORT=${port}   # PowerShell`);
+  if (process.platform === "win32") console.log(`    $env:PORT=${port}   # PowerShell`);
+  else console.log(`    export PORT=${port}   # zsh/bash`);
   console.log("    claude   # (or codex) — it registers + coordinates automatically");
 } else if (cmd === "list") {
   const repo = mainRepo();
