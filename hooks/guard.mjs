@@ -9,6 +9,7 @@ import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { FILE_ACTIVE_MS } from "../lib/config.mjs";
 import { midTurnContext, postToolContextJson } from "../lib/coord-context.mjs";
 import { overlapHardBlock, earlierOverlappingPeers } from "../lib/overlap.mjs";
+import { notify } from "../lib/notify.mjs";
 
 const short = (id) => String(id).replace(/-\d+$/, "");
 
@@ -58,6 +59,12 @@ try {
   const dup = overlapHardBlock(db, { agentId, workspaceId: ws });
   if (dup) {
     logActivity(db, { agentId, workspaceId: ws, event: "overlap-block", detail: dup.agentId });
+    notify({
+      title: "⛔ agent-coord — stood down",
+      message: `Your task duplicates ${short(dup.agentId)}'s (they started first). Narrow your lane or hand off.`,
+      key: `overlap:${dup.agentId}`,
+      sound: true,
+    });
     process.stderr.write(
       `⛔ agent-coord: standing you down — your task duplicates ${short(dup.agentId)}'s, who started before you ` +
         `("${String(dup.task).slice(0, 80)}"). You've been advised and kept editing the same area.\n` +
@@ -71,6 +78,12 @@ try {
   if (!res.granted) {
     enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
     logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });
+    notify({
+      title: "⛔ agent-coord — blocked",
+      message: `"${path}" is held by ${short(res.conflict.agent_id)} (${res.conflict.current_task || "working"}).`,
+      key: `block:${path}`,
+      sound: true,
+    });
     // The holder is ACTIVELY editing this file right now (cold leases don't reach
     // here). Tell the model how to self-resolve — it auto-frees when they move
     // on; never escalate to the human or force-release a live peer.

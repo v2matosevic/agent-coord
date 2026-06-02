@@ -147,6 +147,15 @@ Needs [SwiftBar](https://swiftbar.app) (`brew install --cask swiftbar`) or xbar.
 The plugin is read-only and resolves `node` itself (GUI apps don't inherit your
 fnm/Homebrew PATH), so it works regardless of how Node is installed.
 
+## Desktop notifications (macOS)
+
+Native banners when you're **blocked** on a file, a **peer messages** you, or asks
+you to **yield** — so a heads-down *human* hears what the system already tells
+heads-down *agents*. On by default on macOS (`AGENT_COORD_NOTIFY=0` mutes, `=1`
+forces on); uses `terminal-notifier` if installed, else the built-in `osascript`.
+Fired from the hooks, non-blocking and fail-safe, with same-event alerts deduped
+within a short window so a retried edit never spams.
+
 ## Tests
 
 ```bash
