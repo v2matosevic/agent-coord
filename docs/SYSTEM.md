@@ -114,29 +114,35 @@ lib/
   tasks.mjs        shared task board — createTask (dedup) / claimTask (atomic, dead-owner reclaim) / updateTask / listTasks (deps readiness)
   coord-context.mjs midTurnContext() — peer messages + overlap advisory as PostToolUse additionalContext
   activity.mjs     logActivity, getFleet, queueDepth, recentActivity, getGlobalState
+  insights.mjs     shared read-only analysis — collisionHotspots (same file, 2+ agents) + pathHistory (powers query_history)
+  notify.mjs       native desktop notifications (macOS) — block / message / yield; throttled, detached, fail-safe
+  bash-targets.mjs detectWriteTargets — files a shell command writes (sed -i / > / >> / tee / cp / mv / touch); quote-aware, repo-only
   reaper.mjs       reap() + reapThrottled() — GC dead agents / expired leases / stale links; wal_checkpoint
-  config.mjs       FILE_TTL_SEC, RESOURCE_TTL_SEC, DEAD_MS (3 min), FILE_ACTIVE_MS (5 min warm window), OVERLAP_* tunables, SCHEMA_VERSION
+  config.mjs       FILE_TTL_SEC, RESOURCE_TTL_SEC, DEAD_MS (3 min), FILE_ACTIVE_MS (5 min warm window), OVERLAP_*, NOTIFY_*, SCHEMA_VERSION
 hooks/
   session.mjs      register / prompt / subagent-start / subagent-stop / release
-  guard.mjs        PreToolUse file claim-or-block (exit 2); --post = heartbeat+log
-  bash-guard.mjs   PreToolUse Bash: resource claim-or-block + committer marker
+  guard.mjs        PreToolUse file claim-or-block (exit 2) + notify on block; --post = heartbeat + log + mid-turn delivery
+  bash-guard.mjs   PreToolUse Bash: resource + shell-write-target claim-or-block + committer marker
 mcp/
-  server.mjs       stdio MCP server (10 tools); one process = one agent
+  server.mjs       stdio MCP server (21 tools); one process = one agent
   tool-defs.mjs    JSON-Schema tool catalog
 cli/
   statusline.mjs   Claude status line — leads with THIS terminal's own id + its subagents, then the fleet (⚠ CONTENDED / DEGRADED)
   status.mjs       one-shot fleet table        watch.mjs   terminal live view
   dashboard.mjs    browser dashboard (+ dashboard-ui.mjs)
   worktree.mjs     new / list / rm — physical isolation
+  insights.mjs     terminal retro          digest.mjs   durable per-project hotspot digest → ~/.agent-coord/digests/
+  macos-menubar.mjs + install-macos-menubar.mjs   SwiftBar/xbar menu-bar fleet (macOS)
   doctor.mjs       9-point health check        release.mjs  unstick leases
   install-global.mjs / install-git-hook.mjs / install-claude-hooks.mjs
-  state-json.mjs   machine-readable fleet snapshot (consumed by the VS Code ext)
+  state-json.mjs   machine-readable fleet snapshot (consumed by the VS Code ext + the menu-bar plugin)
 vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-in-tab;
                    reads state via system node (VS Code's Node lacks node:sqlite)
 git/pre-commit     reference copy of the hook
-setup.ps1          idempotent installer
-test/              path-aliasing · concurrency · resource · precommit · mcp-smoke ·
-                   liveness · git-switch · schema-guard · subagent  (+ helpers)
+setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
+test/              path-aliasing · concurrency · resource · precommit · mcp-smoke · liveness ·
+                   git-switch · schema-guard · subagent · notify · bash-targets · bash-guard-block ·
+                   insights  (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
@@ -160,15 +166,18 @@ cli/dashboard.mjs [port]        # browser dashboard (default :7777)
 cli/worktree.mjs new [--base b] # isolate an agent: own worktree+branch+port
 cli/worktree.mjs list | rm <name>
 cli/insights.mjs [--since 7d]   # retro: same-file-by-2+-agents + conflicts
+cli/digest.mjs [--since 7d]     # durable per-project hotspot digest → ~/.agent-coord/digests/
+cli/install-macos-menubar.mjs   # SwiftBar/xbar menu-bar fleet (macOS)
 cli/pending-push.mjs            # who made the unpushed commits + push verdicts
 cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
-setup.ps1                       # (re)install everything, idempotent
+setup.mjs                       # (re)install everything, idempotent, any OS (setup.ps1 = Windows + VS Code panel)
 ```
 
-MCP tools (20, in Claude + Codex): whoami, announce_intent, list_active_agents,
-get_global_state, check_conflicts, claim_files, release_files, claim_resource,
-release_resource, log_activity, post_message, read_messages, pending_push_review,
-ask_agent, check_replies, reply, request_yield, list_tasks, claim_task, update_task.
+MCP tools (21, in Claude + Codex): whoami, announce_intent, list_active_agents,
+get_global_state, check_conflicts, claim_files (returns a `hotspot` warning on
+known multi-agent files), release_files, claim_resource, release_resource,
+log_activity, post_message, read_messages, pending_push_review, ask_agent,
+check_replies, reply, request_yield, query_history, list_tasks, claim_task, update_task.
 
 ---
 
@@ -210,7 +219,7 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-17 tests (run isolated via `AGENT_COORD_HOME`): `path-aliasing`, `concurrency`
+21 tests (run isolated via `AGENT_COORD_HOME`): `path-aliasing`, `concurrency`
 (30→1), `cold-lease` (warm blocks, cold self-heals on takeover), `tasks` (board:
 create/dedup/claim-race/dead-owner-reclaim/deps), `resource`,
 `resource-keyword`, `precommit` (cross-agent vs self),
@@ -219,7 +228,11 @@ create/dedup/claim-race/dead-owner-reclaim/deps), `resource`,
 lock), `messages` (workspace-scoped, directed, read-once, no self-delivery),
 `overlap` + `overlap-flow` (duplicate-work detection, tiebreaker, advisory→escalate
 →clear), `session-link` (claude.exe handshake: a `--tool claude-code` MCP server
-adopts the published id end-to-end; Codex stays standalone). `cli/doctor.mjs` = 9/9.
+adopts the published id end-to-end; Codex stays standalone), `notify` (plan/throttle/
+disabled, dry-run so no real banners), `bash-targets` (shell-write detection + the
+quote/heredoc/fd false-positive guards), `bash-guard-block` (the live Bash hook blocks
+a write to a peer-held file), `insights` (collision hotspots + path history). Proven on
+**Windows 11** and **macOS (Apple Silicon)** — `cli/doctor.mjs` = 9/9, suite 21/21 on both.
 
 ---
 
@@ -308,9 +321,17 @@ adopts the published id end-to-end; Codex stays standalone). `cli/doctor.mjs` = 
 - PID-reuse liveness guard (deferred, see §9).
 - Possible: per-line granularity, shared-lease serial-list, auth boundary (only
   if this stops being a single-user machine).
+- See [`FUTURE.md`](./FUTURE.md) for the post-macOS-expansion roadmap.
 
-Build log: commits `6c3742e` (Tier 0–1 global), `d54f076` (dashboard),
-`503ecd2` (worktree + subagent + hardening).
+**macOS expansion (built):** verified + tuned for macOS (worktree symlink vs the
+Windows junction; platform-aware path test); a SwiftBar/xbar **menu-bar fleet**
+(`cli/macos-menubar.mjs`), **native desktop notifications** on block/message/yield
+(`lib/notify.mjs`), a **shell-write guard** so `sed -i`/`>`/`tee`/`cp`/`mv` don't
+bypass the file lock (`lib/bash-targets.mjs`), and the **self-learning** digest +
+hotspot warnings + `query_history` (§12).
+
+Build log: `6c3742e` (Tier 0–1 global), `d54f076` (dashboard), `503ecd2` (worktree +
+subagent + hardening); macOS port + expansion `36b587d`…`f390922`.
 
 ---
 
@@ -331,13 +352,18 @@ The compounding loop: **act → record → distill → inform → act.**
 Accumulate structured observations → periodically summarize the durable ones into
 memory the next agent reads. That is the whole mechanism; anything fancier is hype.
 
-**Build order (gated on the still-pending two-agent live test):**
-- NOW: `cli/insights.mjs`. If its output is boring, the lane stops here — cheaply.
-- LATER (only once insights proves there's signal): a `digest` that writes scoped
-  per-project memory notes (high threshold, update-not-duplicate); hotspot warnings
-  surfaced in `claim_files`; a `query_history` MCP tool; SessionStart-throttled run.
-- CUT: a model-curated "summarize my work" auto-note writer — it pollutes the
-  hand-curated vault that models Marko; and scheduling a writer before it's proven.
+**Build order:**
+- NOW: `cli/insights.mjs`. ✅ Shipped; proved real signal (caught a double-deploy +
+  concurrent memory edits on the live store), so the lane continued.
+- LATER → **BUILT** (insights proved signal): `cli/digest.mjs` writes a durable
+  per-project hotspot record — high threshold (`--min-agents`), update-not-duplicate
+  (one regenerated file per project), to **`~/.agent-coord/digests/`**, deliberately
+  NOT the hand-curated vault or client repos; a `hotspot` warning is surfaced in
+  `claim_files`; and a `query_history` MCP tool answers "who touched this lately."
+  The analysis is one shared `lib/insights.mjs`. (Still optional: a SessionStart-
+  throttled auto-run of the digest.)
+- CUT (still cut): a model-curated "summarize my work" auto-note writer — it pollutes
+  the hand-curated vault that models Marko; and scheduling a writer before it's proven.
 
 **Privacy (hard rules — the store is single-user but mixes clients):**
 - Distill reads **only** `activity_log` — **never** `agents.current_task` (verbatim
