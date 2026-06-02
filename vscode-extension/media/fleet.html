@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  :root{ --bg:#15120f; --panel:#1d1916; --line:#2c2622; --ink:#ece6df; --mut:#9a8f83;
+         --red:#cc2323; --reddim:#7a1212; --ok:#7bba6e; --idle:#b8923f; }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font:12.5px/1.5 ui-sans-serif,system-ui,Segoe UI,Roboto;padding:10px}
+  code,.mono{font-family:ui-monospace,"Cascadia Code",Consolas,monospace}
+  header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .logo{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red)}
+  h1{font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;margin:0}
+  .count{color:var(--mut);margin-left:auto} .count b{color:var(--ink)}
+  .deg{background:var(--reddim);color:#fff;padding:2px 8px;border-radius:3px;font-size:10.5px;margin-left:6px;display:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+  .repo{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .repo h2{margin:0 0 6px;font-size:11px;font-weight:600;display:flex;gap:6px;align-items:center}
+  .repo h2 .b{color:var(--mut);font-weight:400;font-size:10px}
+  .agent{padding:5px 0;border-top:1px solid var(--line);display:flex;gap:7px;align-items:flex-start}
+  .agent:first-of-type{border-top:0}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);margin-top:5px;flex:none;box-shadow:0 0 6px var(--ok)}
+  .dot.idle{background:var(--idle);box-shadow:none}.dot.codex{background:var(--red);box-shadow:0 0 6px var(--red)}
+  .nm{font-weight:600} .nm .tool{color:var(--mut);font-weight:400;font-size:10px;margin-left:5px}
+  .file{color:var(--red);font-size:11px;word-break:break-all} .task{color:var(--mut);font-size:11px}
+  section{margin-top:12px}
+  section h3{margin:0 0 5px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:600}
+  .row{display:flex;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:11.5px}
+  .row:first-of-type{border-top:0} .row .who{color:var(--mut);margin-left:auto;font-size:10px}
+  .feed .t{color:var(--mut);min-width:52px;font-size:10px} .ev{color:var(--red)} .ev.release,.ev.intent,.ev.register{color:var(--mut)}
+  .empty{color:var(--mut);font-style:italic}
+</style>
+</head>
+<body>
+  <header><span class="logo"></span><h1>Fleet</h1><span class="deg" id="deg">DEGRADED</span><span class="count"><b id="n">0</b> live</span></header>
+  <div class="grid" id="fleet"></div>
+  <section><h3>Resources</h3><div id="res"></div></section>
+  <section><h3>Queue</h3><div id="queue"></div></section>
+  <section class="feed"><h3>Activity</h3><div id="feed"></div></section>
+<script nonce="__NONCE__">
+  // Works inside a VS Code webview (state pushed via postMessage) and standalone.
+  const api = (typeof acquireVsCodeApi === "function") ? acquireVsCodeApi() : null;
+  const $ = (s) => document.querySelector(s);
+  const base = (p) => p ? p.replace(/\/+$/,"").split("/").pop() : "—";
+  const esc = (s) => String(s ?? "").replace(/[<&]/g, c => ({ "<":"&lt;","&":"&amp;" }[c]));
+  const fresh = (t) => Date.now() - new Date(t).getTime() < 90000;
+
+  function render(s){
+    if(!s){ return; }
+    $("#n").textContent = (s.agents||[]).length;
+    $("#deg").style.display = s.degraded ? "inline-block" : "none";
+    const byRepo = {};
+    for(const a of (s.agents||[])) (byRepo[a.repo_path||"(no repo)"] ||= []).push(a);
+    $("#fleet").innerHTML = Object.entries(byRepo).map(([repo,as]) => `
+      <div class="repo"><h2>${esc(base(repo))} <span class="b">${esc(as[0]?.branch||"")}</span></h2>
+      ${as.map(a => `<div class="agent"><div class="dot ${a.tool==='codex'?'codex':''} ${fresh(a.last_heartbeat)?'':'idle'}"></div>
+        <div><div class="nm">${esc(a.agent_id)}<span class="tool">${esc(a.tool)}</span></div>
+        ${a.editing?`<div class="file">⚙ ${esc(a.editing)}</div>`:""}
+        ${a.current_task?`<div class="task">${esc(a.current_task)}</div>`:""}</div></div>`).join("")}
+      </div>`).join("") || '<div class="empty">no live agents</div>';
+    $("#res").innerHTML = (s.resourceLeases||[]).map(r => `<div class="row"><span class="mono">${esc(r.resource_id)}</span><span class="who">${esc(r.agent_id)}</span></div>`).join("") || '<div class="empty">none</div>';
+    $("#queue").innerHTML = (s.queue||[]).map(q => `<div class="row"><span class="mono">${esc((q.key||"").split("||").pop())}</span><span class="who">${esc(q.agent_id)}</span></div>`).join("") || '<div class="empty">none</div>';
+    $("#feed").innerHTML = (s.recent||[]).map(e => `<div class="row"><span class="t">${esc((e.ts||"").slice(11,19))}</span><span class="ev ${esc(e.event)}">${esc(e.event)}</span><span>${esc(e.detail||"")}</span><span class="who">${esc(e.agent_id)}</span></div>`).join("") || '<div class="empty">none</div>';
+  }
+  window.addEventListener("message", (e) => render(e.data));
+  if(api) api.postMessage({ type: "ready" });
+</script>
+</body>
+</html>

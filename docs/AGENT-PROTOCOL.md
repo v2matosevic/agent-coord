@@ -1,0 +1,123 @@
+# Agent Protocol — coordinating with other agents
+
+You are very likely **not the only agent working on this machine.** Other Claude
+Code and Codex sessions may be editing this repo (or sharing the dev port / DB /
+deploy) right now. A coordination layer (`agent-coord`) tracks all of them in a
+shared store. This is how you stay in sync instead of stepping on each other.
+
+## What's automatic (you don't have to remember)
+
+- Before any `Write`/`Edit`/`MultiEdit`, a hook **claims the file**. If another
+  live agent holds it you get a **blocked tool call (exit 2)** naming the holder.
+- Before risky `Bash` (dev server, `drizzle-kit push`/migrations, deploy) a hook
+  **claims the machine-wide resource**; a colliding second one is blocked.
+- `git commit` is gated globally: it's **rejected** if you stage a file another
+  live agent holds. (This is the net that also catches Codex / manual commits.)
+
+## What you should do proactively
+
+1. **Look before you leap.** At the start of a task, check who else is active and
+   what they hold — don't assume you're alone:
+   - MCP tool: `list_active_agents` / `get_global_state` (available in Claude & Codex), or
+   - shell: `node --disable-warning=ExperimentalWarning $AGENT_COORD/cli/status.mjs`
+   If a peer is already on the area you were about to touch, **pick different
+   work or coordinate** — don't duplicate or contradict them.
+2. **Announce your intent.** Call `announce_intent` with a one-line task so peers
+   see what you're doing. (Claude also captures this from your prompt.)
+3. **Respect a block — but it self-heals.** An `exit 2` means a peer is
+   *actively* editing that file right now (a lock goes **cold** and stops
+   blocking a few minutes after the holder moves on — so abandoned files free
+   themselves; you never need to force-release a stale lock or ask the human to
+   unlock). When blocked: edit a different file and retry shortly, or
+   `post_message` the holder to coordinate. The block message tells you roughly
+   when it auto-frees. Force-release (`cli/release.mjs`) is a true last resort
+   only if a holder is wedged/dead and you can't wait.
+4. **Check in periodically** during long tasks — a peer may have started since you
+   began. A quick `list_active_agents` keeps the codebase coherent.
+5. **Want hard isolation?** `node $AGENT_COORD/cli/worktree.mjs new`
+   gives you your own worktree + branch + port so you physically can't collide;
+   merge back when done.
+
+## Talk to each other (workspace-scoped messaging)
+
+You can leave notes for the other agents in your repo — and you'll automatically
+hear theirs. This is how you go from "avoid collisions" to actually coordinating.
+
+- **Post** with the MCP `post_message` tool. Default scope is THIS workspace (same
+  repo), so projects never bleed. `to:<agent_id>` directs it; `scope:'global'`
+  broadcasts to the whole fleet. Examples: "refactoring auth, leave lib/auth
+  alone for ~20 min", "API routes are done — safe to wire the UI now."
+- **Receive** automatically: unread messages from peers are injected into your
+  context at the start of each turn (you'll see a `📬` block). `read_messages`
+  also pulls them on demand (this is the path Codex/other agents use).
+- `announce_intent` also broadcasts your task to the room, so peers see what you
+  picked up. The statusline shows a `✉ N` unread indicator.
+
+Use it like a teammate in the same room: say what you're about to do, hand off
+when you're done, and warn before a big change.
+
+**You hear peers mid-turn now.** Unread messages are surfaced not only at your
+next prompt but BETWEEN your tool calls (after each edit), so a peer can reach
+you even while you're heads-down building. If a `📬` block tells you a peer is
+already on your work — stop and coordinate; don't finish a duplicate in silence.
+
+## Don't duplicate — de-conflicting overlapping work
+
+The worst failure isn't two agents touching one file (the lock catches that) —
+it's two agents launched on the same vague prompt quietly building the SAME
+thing in parallel. Guard against it:
+
+- **Announce first.** `announce_intent` now returns a `warning` if a live peer
+  in this repo is already on similar work. If you're the **later starter**, you
+  yield: narrow your lane (re-announce a distinct sub-task — that clears the
+  flag) or `post_message` to split scope. Don't rebuild what they're building.
+- **The tiebreaker is deterministic:** the agent that **started first**
+  (earlier `registered_at`, visible in `list_active_agents`) keeps the work; the
+  later starter stands down. No need to argue or call the human.
+- **Automatic backstop:** if you ARE the later starter and keep editing the
+  overlapping area, your guard first advises you (mid-turn), then — if you ignore
+  it — **blocks your edits** until you differentiate your task. This is by
+  design; re-announce a real, distinct lane to proceed.
+- **Ask a peer to stand down** with `request_yield(to, reason)` instead of
+  force-releasing their locks or asking the human to kill them. They hear it
+  mid-turn; if they agree they release and stop. Reserve it for when you're
+  provably duplicating and you have priority (started first / verified version).
+
+## Before pushing commits you didn't make
+
+If you're told to push and the history has commits from OTHER agents, don't
+reflexively ask the human "should I push these?" — work it out:
+
+1. Run `pending_push_review` (MCP) or `node $AGENT_COORD\cli\pending-push.mjs`.
+   Per unpushed commit it tells you the author, whether that agent is still live,
+   and a verdict.
+2. Act on the verdicts:
+   - **push-mine / push-peer-done** — yours, or a finished agent's committed
+     (non-WIP) work → safe to include.
+   - **hold-wip** — subject marked WIP → do NOT push to prod.
+   - **ask-peer** — the author is still LIVE → `ask_agent(to:<author>, "commit
+     <hash> — prod-ready?")` then `check_replies`. Confirm → include; no → hold;
+     no reply + they drop offline → fall back.
+   - **ask-human / unknown** — provenance unknown → genuinely the human's call.
+3. Mark your own not-yet-ready commits `wip:` so peers hold them automatically.
+
+**Auto-push when clear (Marko's standing choice):** if `pending_push_review` returns
+`allClear: true` — every unpushed commit is push-safe (yours or finished peers, no
+WIP, nothing ambiguous) — **push without asking the human.** Only stop to ask when
+there are blockers (WIP / live-peer / unknown author).
+
+Honest limit: a finished agent can't answer — provenance + the WIP convention
+carry the decision; live ask/reply is only the bonus path when peers are concurrent.
+
+## If it's degraded
+
+If `cli/status.mjs` / the statusline shows **⚠ COORD DEGRADED**, the store hit an
+error and locks aren't being enforced — be extra conservative about shared files
+until it clears (`node $AGENT_COORD/cli/doctor.mjs` to diagnose).
+
+## The point
+
+The codebase must stay coherent even with a dozen agents on it. Enforcement
+prevents the worst collisions; **proactive awareness** (check → announce →
+respect → re-check) prevents the subtler ones — duplicated work and contradictory
+designs. Treat other agents as teammates you can see, not invisible strangers.

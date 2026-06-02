@@ -1,0 +1,38 @@
+{
+  "name": "agent-coord-fleet",
+  "displayName": "Agent Fleet (agent-coord)",
+  "description": "Live view of all AI coding agents coordinating on this machine",
+  "version": "0.1.0",
+  "publisher": "kenshi",
+  "private": true,
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onView:agentCoordFleet", "onCommand:agentCoord.openDashboard"],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "agentCoord", "title": "Agent Fleet", "icon": "media/icon.svg" }]
+    },
+    "views": {
+      "agentCoord": [{ "id": "agentCoordFleet", "name": "Fleet", "type": "webview" }]
+    },
+    "commands": [
+      { "command": "agentCoord.openDashboard", "title": "Agent Fleet: Open in Tab", "icon": "$(window)" },
+      { "command": "agentCoord.refresh", "title": "Agent Fleet: Refresh", "icon": "$(refresh)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "agentCoord.openDashboard", "when": "view == agentCoordFleet", "group": "navigation@1" },
+        { "command": "agentCoord.refresh", "when": "view == agentCoordFleet", "group": "navigation@2" }
+      ]
+    },
+    "configuration": {
+      "title": "agent-coord",
+      "properties": {
+        "agentCoord.root": { "type": "string", "default": "", "description": "Absolute path to your agent-coord clone. Auto-resolved from the AGENT_COORD_ROOT env var (set by setup.ps1) when blank; set here to override." },
+        "agentCoord.node": { "type": "string", "default": "node", "description": "Node executable used to read the store" },
+        "agentCoord.refreshMs": { "type": "number", "default": 2000, "description": "Refresh interval (ms)" }
+      }
+    }
+  }
+}
