@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, copyFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -54,6 +54,7 @@ if (!settings.statusLine) {
 
 if (added || statusNote === "set") {
   if (existsSync(FILE)) copyFileSync(FILE, FILE + ".bak." + Date.now());
+  else mkdirSync(dirname(FILE), { recursive: true }); // fresh machine: ~/.claude may not exist yet
   writeFileSync(FILE, JSON.stringify(settings, null, 2) + "\n");
 }
 console.log(`Claude hooks: ${added} added (${WANT.length - added} already present). statusLine: ${statusNote}.`);
