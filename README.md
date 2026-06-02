@@ -131,6 +131,22 @@ leases, queue, activity) + an "Open in Tab" view. `setup.ps1` builds and install
 it; see [`vscode-extension/README.md`](./vscode-extension/README.md). It reads the
 store via your system `node` (no extension dependencies).
 
+## macOS menu bar (optional)
+
+The Mac-native counterpart to the VS Code panel: a **SwiftBar/xbar plugin** that
+lives in the menu bar showing the live fleet — agent count (🟢 / 🔴 when files are
+contended / ⚠️ when degraded), a dropdown of agents grouped by repo with the file
+each holds, contended files, resource leases, the task board, and a link to the
+dashboard. `node setup.mjs` generates it on macOS; or run it directly:
+
+```bash
+node cli/install-macos-menubar.mjs   # generates the plugin + installs it if SwiftBar/xbar is found
+```
+
+Needs [SwiftBar](https://swiftbar.app) (`brew install --cask swiftbar`) or xbar.
+The plugin is read-only and resolves `node` itself (GUI apps don't inherit your
+fnm/Homebrew PATH), so it works regardless of how Node is installed.
+
 ## Tests
 
 ```bash
