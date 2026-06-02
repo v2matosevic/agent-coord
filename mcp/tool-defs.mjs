@@ -96,6 +96,12 @@ export const TOOL_DEFS = [
     inputSchema: { type: "object", properties: { to: { type: "string" }, reason: { type: "string" } }, required: ["to"] },
   },
   {
+    name: "query_history",
+    description:
+      "Who recently touched a file (exact path) or directory (prefix) in THIS repo — the distinct agents plus edit/claim/conflict events. Use before diving into an unfamiliar or shared area to spot a peer who owns it or recent churn the lock wouldn't show. Optional `days` window (default 14).",
+    inputSchema: { type: "object", properties: { path: { type: "string" }, days: { type: "number" } }, required: ["path"] },
+  },
+  {
     name: "list_tasks",
     description:
       "Show the shared task board for THIS repo: every task, who owns it (and if they're still live), status (open/claimed/done/blocked), and dependency readiness. Check this before picking work so you don't duplicate a peer.",

@@ -111,6 +111,7 @@ node cli/dashboard.mjs [port]       # live browser dashboard (default :7777)
 node cli/tasks.mjs                  # shared task board (--add "title" | --done <id>)
 node cli/worktree.mjs new           # isolate an agent: own worktree + branch + port
 node cli/insights.mjs [--since 7d]  # retro: files edited by 2+ agents + conflicts
+node cli/digest.mjs [--since 7d]    # write a durable per-project hotspot digest (~/.agent-coord/digests/)
 node cli/pending-push.mjs           # who authored the unpushed commits + push verdicts
 node cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 ```
@@ -122,7 +123,7 @@ All CLIs run under `node --disable-warning=ExperimentalWarning <script>`.
 `check_conflicts`, `claim_files`, `release_files`, `claim_resource`,
 `release_resource`, `log_activity`, `post_message`, `read_messages`,
 `pending_push_review`, `ask_agent`, `check_replies`, `reply`, `request_yield`,
-`list_tasks`, `claim_task`, `update_task`.
+`query_history`, `list_tasks`, `claim_task`, `update_task`.
 
 ## VS Code extension (optional)
 
