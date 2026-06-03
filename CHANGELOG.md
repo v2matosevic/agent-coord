@@ -3,7 +3,7 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
-## Recent — resume identity reconciliation (no more ghost twins)
+## 1.0.1 — resume identity reconciliation (no more ghost twins)
 
 Root-cause fix for the split this session surfaced: the MCP server resolved its
 identity once at startup and, if it lost the SessionStart race or the session
@@ -15,7 +15,10 @@ claude.exe→id link for the freshly-resolved *current* pid as well as the cache
 server); (2) `lib/server-identity.mjs` lets the server **late-adopt** that link on
 its next tool call — before any claim, so the throwaway id never accrues state —
 tearing down the dead twin. Gated to `claude-code` like the startup adoption (Codex
-never adopts). `+ test/server-identity.mjs`; suite 22/22, `doctor` 9/9.
+never adopts). `+ test/server-identity.mjs`; suite 22/22, `doctor` 9/9. A precursor
+patch in `lib/pending-push.mjs` also bridges the same split (treats the
+session-linked hook id for our parent pid as ours) so a self-commit isn't read as a
+live peer's even before the server reconciles.
 
 ## 1.0.0 — stable cut: live snapshot + VS Code fleet view
 
