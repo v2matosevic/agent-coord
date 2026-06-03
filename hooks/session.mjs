@@ -49,11 +49,13 @@ try {
     logActivity(db, { agentId, workspaceId: workspaceId(repoRoot), event: "register", detail: repoRoot });
     reap(db);
     // Publish claude.exe -> our id so this session's stdio MCP server adopts the
-    // SAME identity (no ghost twin). Cached per session_id so resume/compact
-    // SessionStarts skip the one-time process-tree walk.
+    // SAME identity (no ghost twin). On RESUME the cached pid is the OLD claude.exe,
+    // so we ALSO resolve the current one and link both — otherwise the resumed
+    // session's new MCP server (parented by the new pid) finds no link and stays a
+    // standalone twin. Re-resolving costs one process-walk per SessionStart (rare).
     try {
-      const claudePid = cachedClaudePid(input.session_id) || findClaudePid(process.ppid);
-      if (claudePid) writeSessionLink(claudePid, agentId, input.session_id);
+      const pids = new Set([cachedClaudePid(input.session_id), findClaudePid(process.ppid)].filter(Boolean));
+      for (const pid of pids) writeSessionLink(pid, agentId, input.session_id);
     } catch {}
   } else if (MODE === "prompt") {
     const { repoRoot, branch } = ctx();

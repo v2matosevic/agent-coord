@@ -13,6 +13,7 @@ import { analyzePendingPush } from "../lib/pending-push.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { pollSessionLink } from "../lib/session-link.mjs";
+import { reconcileServerIdentity } from "../lib/server-identity.mjs";
 import { findOverlappingPeers } from "../lib/overlap.mjs";
 import { createTask, claimTask, updateTask, listTasks } from "../lib/tasks.mjs";
 import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
@@ -46,7 +47,7 @@ if (tool === "claude-code") {
     agentId = await pollSessionLink(process.ppid);
   } catch {}
 }
-const adopted = !!agentId;
+let adopted = !!agentId;
 if (!agentId) agentId = agentIdFromSession(randomUUID());
 
 ensureAgent(db, { agentId, tool, repoPath: repoRoot, branch });
@@ -199,6 +200,17 @@ const server = new Server({ name: "agent-coord", version: "1.0.0" }, { capabilit
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;
+  // If a Claude session started standalone (lost the SessionStart race / resumed),
+  // adopt its hook identity as soon as the link appears — before handling the call,
+  // so nothing is ever claimed under the throwaway id. Gated to claude-code like the
+  // startup adoption: only Claude publishes a hook link, so Codex never adopts one.
+  if (!adopted && tool === "claude-code") {
+    const r = reconcileServerIdentity(db, { agentId, ppid: process.ppid, tool, repoPath: repoRoot, branch });
+    if (r.adopted) {
+      agentId = r.agentId;
+      adopted = true;
+    }
+  }
   heartbeat(db, agentId);
   try {
     return ok(handle(name, a));
