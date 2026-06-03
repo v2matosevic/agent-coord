@@ -29,6 +29,10 @@ const runGuard = (command) =>
   spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", GUARD], {
     input: JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: repo, session_id: "tester-xyz" }),
     encoding: "utf8",
+    // The block path calls the real notify() → a live macOS banner. Isolating the
+    // store via AGENT_COORD_HOME does NOT isolate the OS notification layer, so the
+    // child must opt out explicitly or running the suite spams the desktop.
+    env: { ...process.env, AGENT_COORD_NOTIFY: "0" },
   });
 
 let ok = true;
