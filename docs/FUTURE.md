@@ -67,15 +67,6 @@ setup (solo operator, many concurrent Claude/Codex sessions, web-dev studio, mac
 
 ## Robustness / ops
 
-- **MCP identity reconciliation on resume** (M) — the MCP server resolves its
-  identity ONCE at startup (`pollSessionLink`, 4s) and never reconciles. If it loses
-  the SessionStart race or the session resumes, it falls back to a standalone id and
-  shows up as a "ghost twin" of the same session — the split the session-link was
-  built to prevent, recurring at resume. `pending_push_review` now bridges past it
-  (treats the session-linked hook id for our parent pid as ours, so it doesn't flag
-  a self-commit as a live peer's), but the twin still appears as a second agent in
-  the fleet and splits any leases/messages it makes. Fix: re-poll + late-adopt the
-  link on the first tool calls, before the standalone id has created state.
 - **PID-reuse liveness guard** (M, deferred) — revisit using `proc_start_time` so a
   reused PID can't free a live lease (see §9).
 - **`doctor --deep`** (S) — check hook latency, store/WAL size, throttle-file health;
