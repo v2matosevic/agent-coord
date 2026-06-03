@@ -7,6 +7,7 @@ import { getFleet, queueDepth } from "../lib/activity.mjs";
 import { unreadCount } from "../lib/messages.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { reapThrottled } from "../lib/reaper.mjs";
+import { writeSnapshot } from "../lib/snapshot.mjs";
 
 const COLOR = !process.env.NO_COLOR;
 const MAX_SHOWN = 6;
@@ -33,6 +34,7 @@ try {
   const { repoRoot, branch } = gitContext(cwd);
   ensureAgent(db, { agentId: myId, tool: "claude-code", repoPath: repoRoot, branch }); // self-heartbeat
   reapThrottled(db);
+  writeSnapshot(db); // keep ~/.agent-coord/snapshot.json fresh for the VS Code fleet view
 
   const myRoom = workspaceId(repoRoot);
   const fleet = getFleet(db).filter((a) => a.agent_id !== myId);

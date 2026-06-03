@@ -126,8 +126,10 @@ hooks/
 mcp/
   server.mjs       stdio MCP server (21 tools); one process = one agent
   tool-defs.mjs    JSON-Schema tool catalog
+lib/
+  snapshot.mjs     atomic JSON mirror of the fleet → ~/.agent-coord/snapshot.json (written by the statusline tick + state-json); stamps generatedAt + clone root
 cli/
-  statusline.mjs   Claude status line — leads with THIS terminal's own id + its subagents, then the fleet (⚠ CONTENDED / DEGRADED)
+  statusline.mjs   Claude status line — leads with THIS terminal's own id + its subagents, then the fleet (⚠ CONTENDED / DEGRADED); also rewrites snapshot.json each tick
   status.mjs       one-shot fleet table        watch.mjs   terminal live view
   dashboard.mjs    browser dashboard (+ dashboard-ui.mjs)
   worktree.mjs     new / list / rm — physical isolation
@@ -135,9 +137,10 @@ cli/
   macos-menubar.mjs + install-macos-menubar.mjs   SwiftBar/xbar menu-bar fleet (macOS)
   doctor.mjs       9-point health check        release.mjs  unstick leases
   install-global.mjs / install-git-hook.mjs / install-claude-hooks.mjs
-  state-json.mjs   machine-readable fleet snapshot (consumed by the VS Code ext + the menu-bar plugin)
-vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-in-tab;
-                   reads state via system node (VS Code's Node lacks node:sqlite)
+  state-json.mjs   live store → JSON for the menu-bar plugin + the extension's refresh fallback; also refreshes snapshot.json
+vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-in-tab.
+                   Reads ~/.agent-coord/snapshot.json directly (no subprocess / no node:sqlite / no PATH dep),
+                   falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
 test/              path-aliasing · concurrency · resource · precommit · mcp-smoke · liveness ·
