@@ -195,7 +195,7 @@ function handle(name, a) {
   }
 }
 
-const server = new Server({ name: "agent-coord", version: "0.1.0" }, { capabilities: { tools: {} } });
+const server = new Server({ name: "agent-coord", version: "1.0.0" }, { capabilities: { tools: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;

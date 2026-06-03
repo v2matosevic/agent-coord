@@ -3,6 +3,33 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## 1.0.0 — stable cut: live snapshot + VS Code fleet view
+
+First version tagged stable (`v1.0.0`), after a full pass over presence,
+self-healing leases, the git commit net, messaging, overlap/duplicate-work
+detection, and self-learning insights — `doctor` 9/9, suite green.
+
+**Live snapshot (`lib/snapshot.mjs`).** A plain-JSON mirror of the whole fleet at
+`~/.agent-coord/snapshot.json`, written atomically (temp+rename) by the Claude
+statusline every tick — so it's fresh whenever any agent is live — and refreshed
+by `cli/state-json.mjs`. It stamps `generatedAt` and the clone `root`. The point:
+external consumers no longer need to open SQLite or find a `node>=22` on PATH
+(fnm's node lives at an ephemeral per-shell path a GUI editor can't see).
+
+**VS Code Fleet view, robust + zero-config.** The Activity-Bar panel now reads the
+snapshot file directly (no subprocess, no `node:sqlite`, no configured path),
+falling back to a live `state-json.mjs` read — rooted from the snapshot — only
+when the file is stale. The view gained per-agent heartbeat age, every file +
+resource claim (click a file chip to open it), the shared task board, and a live
+"updated Ns ago". macOS install documented (the old README was Windows-only).
+
+**Test suite no longer spams real macOS notifications.** `test/bash-guard-block.mjs`
+ran the real Bash guard whose block path calls `notify()`; isolating the store via
+`AGENT_COORD_HOME` doesn't isolate the OS notification layer, so running the suite
+popped a live "blocked (shell)" banner. The spawned guard now opts out with
+`AGENT_COORD_NOTIFY=0` (assertions unchanged). `overlap-flow.mjs` only notifies on
+messages, of which it posts none, so it was already clean.
+
 ## Recent — self-learning (digest, hotspot warnings, query_history)
 
 The gated SYSTEM.md §12 step, now that insights proved real signal. The retro

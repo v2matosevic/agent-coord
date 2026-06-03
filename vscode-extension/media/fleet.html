@@ -3,65 +3,169 @@
 <head>
 <meta charset="utf-8" />
 <style>
-  :root{ --bg:#15120f; --panel:#1d1916; --line:#2c2622; --ink:#ece6df; --mut:#9a8f83;
-         --red:#cc2323; --reddim:#7a1212; --ok:#7bba6e; --idle:#b8923f; }
+  :root{ --bg:#15120f; --panel:#1d1916; --panel2:#221d19; --line:#2c2622; --ink:#ece6df; --mut:#9a8f83;
+         --red:#cc2323; --reddim:#7a1212; --ok:#7bba6e; --idle:#b8923f; --chip:#2a2420; }
   *{box-sizing:border-box} html,body{margin:0}
-  body{background:var(--bg);color:var(--ink);font:12.5px/1.5 ui-sans-serif,system-ui,Segoe UI,Roboto;padding:10px}
-  code,.mono{font-family:ui-monospace,"Cascadia Code",Consolas,monospace}
-  header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  body{background:var(--bg);color:var(--ink);font:12.5px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto;padding:10px}
+  code,.mono{font-family:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace}
+  a{color:inherit;text-decoration:none}
+  header{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
   .logo{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red)}
   h1{font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;margin:0}
-  .count{color:var(--mut);margin-left:auto} .count b{color:var(--ink)}
-  .deg{background:var(--reddim);color:#fff;padding:2px 8px;border-radius:3px;font-size:10.5px;margin-left:6px;display:none}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
-  .repo{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
-  .repo h2{margin:0 0 6px;font-size:11px;font-weight:600;display:flex;gap:6px;align-items:center}
+  .count{color:var(--mut)} .count b{color:var(--ink)}
+  .spacer{margin-left:auto}
+  .upd{color:var(--mut);font-size:10.5px}
+  .badge{padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;letter-spacing:.04em}
+  .deg{background:var(--reddim);color:#fff;display:none}
+  .stale{background:#3a3a1a;color:#e6dca0;display:none}
+
+  .repo{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+  .repo h2{margin:0 0 4px;font-size:11px;font-weight:600;display:flex;gap:6px;align-items:baseline}
   .repo h2 .b{color:var(--mut);font-weight:400;font-size:10px}
-  .agent{padding:5px 0;border-top:1px solid var(--line);display:flex;gap:7px;align-items:flex-start}
+  .agent{padding:7px 0;border-top:1px solid var(--line)}
   .agent:first-of-type{border-top:0}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);margin-top:5px;flex:none;box-shadow:0 0 6px var(--ok)}
-  .dot.idle{background:var(--idle);box-shadow:none}.dot.codex{background:var(--red);box-shadow:0 0 6px var(--red)}
-  .nm{font-weight:600} .nm .tool{color:var(--mut);font-weight:400;font-size:10px;margin-left:5px}
-  .file{color:var(--red);font-size:11px;word-break:break-all} .task{color:var(--mut);font-size:11px}
+  .ahead{display:flex;gap:7px;align-items:center}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none;box-shadow:0 0 6px var(--ok)}
+  .dot.idle{background:var(--idle);box-shadow:none}
+  .dot.codex{background:#5b8def;box-shadow:0 0 6px #5b8def}
+  .nm{font-weight:600}
+  .tool{color:var(--mut);font-weight:400;font-size:10px;margin-left:5px}
+  .age{color:var(--mut);font-size:10px;margin-left:auto}
+  .task{color:var(--mut);font-size:11px;margin:2px 0 0 14px}
+  .claims{margin:4px 0 0 14px;display:flex;flex-wrap:wrap;gap:4px}
+  .chip{background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:10.5px;color:var(--ink);cursor:pointer;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  .chip:hover{border-color:var(--red)}
+  .chip.editing{color:var(--red);border-color:var(--reddim)}
+  .chip.excl::after{content:" ●";color:var(--red);font-size:8px}
+  .rchip{background:#241d2a;border-color:#3a2f44}
+
   section{margin-top:12px}
-  section h3{margin:0 0 5px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:600}
-  .row{display:flex;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:11.5px}
-  .row:first-of-type{border-top:0} .row .who{color:var(--mut);margin-left:auto;font-size:10px}
-  .feed .t{color:var(--mut);min-width:52px;font-size:10px} .ev{color:var(--red)} .ev.release,.ev.intent,.ev.register{color:var(--mut)}
-  .empty{color:var(--mut);font-style:italic}
+  section h3{margin:0 0 5px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:600;display:flex;gap:6px;align-items:center}
+  section h3 .n{color:var(--ink);background:var(--chip);border-radius:8px;padding:0 6px;font-size:9.5px}
+  .row{display:flex;gap:8px;padding:3px 0;border-top:1px solid var(--line);font-size:11.5px;align-items:baseline}
+  .row:first-of-type{border-top:0}
+  .row .who{color:var(--mut);margin-left:auto;font-size:10px;white-space:nowrap}
+  .task-row .st{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;padding:0 5px;border-radius:3px;background:var(--chip);color:var(--mut)}
+  .task-row .st.in_progress{color:var(--idle)} .task-row .st.open{color:var(--ok)}
+  .feed .t{color:var(--mut);min-width:52px;font-size:10px}
+  .ev{color:var(--red)} .ev.release,.ev.intent,.ev.register,.ev.edit,.ev.claim{color:var(--mut)}
+  .ev.conflict,.ev.overlap-block,.ev.resource-conflict{color:var(--red);font-weight:600}
+  .empty{color:var(--mut);font-style:italic;padding:4px 0}
+  .setup{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;color:var(--mut);line-height:1.6}
+  .setup b{color:var(--ink)}
 </style>
 </head>
 <body>
-  <header><span class="logo"></span><h1>Fleet</h1><span class="deg" id="deg">DEGRADED</span><span class="count"><b id="n">0</b> live</span></header>
-  <div class="grid" id="fleet"></div>
-  <section><h3>Resources</h3><div id="res"></div></section>
-  <section><h3>Queue</h3><div id="queue"></div></section>
+  <header>
+    <span class="logo"></span><h1>Fleet</h1>
+    <span class="count"><b id="n">0</b> live</span>
+    <span class="badge deg" id="deg">DEGRADED</span>
+    <span class="badge stale" id="staleb">STALE</span>
+    <span class="spacer"></span>
+    <span class="upd" id="upd"></span>
+  </header>
+  <div id="setup" class="setup" style="display:none"></div>
+  <div id="fleet"></div>
+  <section id="tasksWrap" style="display:none"><h3>Tasks <span class="n" id="tasksN">0</span></h3><div id="tasks"></div></section>
+  <section id="queueWrap" style="display:none"><h3>Queue <span class="n" id="queueN">0</span></h3><div id="queue"></div></section>
   <section class="feed"><h3>Activity</h3><div id="feed"></div></section>
 <script nonce="__NONCE__">
-  // Works inside a VS Code webview (state pushed via postMessage) and standalone.
   const api = (typeof acquireVsCodeApi === "function") ? acquireVsCodeApi() : null;
   const $ = (s) => document.querySelector(s);
-  const base = (p) => p ? p.replace(/\/+$/,"").split("/").pop() : "—";
-  const esc = (s) => String(s ?? "").replace(/[<&]/g, c => ({ "<":"&lt;","&":"&amp;" }[c]));
-  const fresh = (t) => Date.now() - new Date(t).getTime() < 90000;
+  const base = (p) => p ? p.replace(/\/+$/,"").split("/").pop() : "(no repo)";
+  const esc = (s) => String(s ?? "").replace(/[<&>"]/g, c => ({ "<":"&lt;","&":"&amp;",">":"&gt;",'"':"&quot;" }[c]));
+  const tail = (p) => { p = String(p||""); const x = p.split("/"); return x.length > 2 ? "…/" + x.slice(-2).join("/") : p; };
 
-  function render(s){
-    if(!s){ return; }
-    $("#n").textContent = (s.agents||[]).length;
-    $("#deg").style.display = s.degraded ? "inline-block" : "none";
-    const byRepo = {};
-    for(const a of (s.agents||[])) (byRepo[a.repo_path||"(no repo)"] ||= []).push(a);
-    $("#fleet").innerHTML = Object.entries(byRepo).map(([repo,as]) => `
-      <div class="repo"><h2>${esc(base(repo))} <span class="b">${esc(as[0]?.branch||"")}</span></h2>
-      ${as.map(a => `<div class="agent"><div class="dot ${a.tool==='codex'?'codex':''} ${fresh(a.last_heartbeat)?'':'idle'}"></div>
-        <div><div class="nm">${esc(a.agent_id)}<span class="tool">${esc(a.tool)}</span></div>
-        ${a.editing?`<div class="file">⚙ ${esc(a.editing)}</div>`:""}
-        ${a.current_task?`<div class="task">${esc(a.current_task)}</div>`:""}</div></div>`).join("")}
-      </div>`).join("") || '<div class="empty">no live agents</div>';
-    $("#res").innerHTML = (s.resourceLeases||[]).map(r => `<div class="row"><span class="mono">${esc(r.resource_id)}</span><span class="who">${esc(r.agent_id)}</span></div>`).join("") || '<div class="empty">none</div>';
-    $("#queue").innerHTML = (s.queue||[]).map(q => `<div class="row"><span class="mono">${esc((q.key||"").split("||").pop())}</span><span class="who">${esc(q.agent_id)}</span></div>`).join("") || '<div class="empty">none</div>';
-    $("#feed").innerHTML = (s.recent||[]).map(e => `<div class="row"><span class="t">${esc((e.ts||"").slice(11,19))}</span><span class="ev ${esc(e.event)}">${esc(e.event)}</span><span>${esc(e.detail||"")}</span><span class="who">${esc(e.agent_id)}</span></div>`).join("") || '<div class="empty">none</div>';
+  function ago(iso){
+    const ms = Date.now() - new Date(iso).getTime();
+    if(!isFinite(ms)) return "";
+    const s = Math.max(0, Math.round(ms/1000));
+    if(s < 60) return s + "s";
+    const m = Math.round(s/60); if(m < 60) return m + "m";
+    return Math.round(m/60) + "h";
   }
+
+  let last = null;
+  function render(s){
+    if(!s) return;
+    last = s;
+    const agents = s.agents || [];
+    $("#n").textContent = agents.length;
+    $("#deg").style.display = s.degraded ? "inline-block" : "none";
+    $("#staleb").style.display = s.stale ? "inline-block" : "none";
+
+    if(s.error && !agents.length){
+      $("#setup").style.display = "block";
+      $("#setup").innerHTML = esc(s.error);
+    } else $("#setup").style.display = "none";
+
+    // claims grouped by agent
+    const filesByAgent = {}, resByAgent = {};
+    for(const l of (s.fileLeases||[])) (filesByAgent[l.agent_id] ||= []).push(l);
+    for(const r of (s.resourceLeases||[])) (resByAgent[r.agent_id] ||= []).push(r);
+
+    const byRepo = {};
+    for(const a of agents) (byRepo[a.repo_path||""] ||= []).push(a);
+
+    $("#fleet").innerHTML = Object.entries(byRepo).map(([repo, as]) => `
+      <div class="repo">
+        <h2>${esc(base(repo))} <span class="b">${esc(as[0]?.branch||"")}</span></h2>
+        ${as.map(a => {
+          const live = (Date.now() - new Date(a.last_heartbeat).getTime()) < 90000;
+          const files = filesByAgent[a.agent_id] || [];
+          const res = resByAgent[a.agent_id] || [];
+          const chips = files.map(f => {
+            const isEd = f.path === a.editing;
+            return `<span class="chip ${isEd?'editing':''} ${f.mode==='exclusive'?'excl':''}" data-path="${esc(f.path)}" data-repo="${esc(a.repo_path||'')}" title="${esc(f.path)}${f.mode==='exclusive'?' (exclusive)':''}">${isEd?'⚙ ':''}${esc(tail(f.path))}</span>`;
+          }).join("");
+          const rchips = res.map(r => `<span class="chip rchip" title="resource lease">${esc(r.resource_id)}</span>`).join("");
+          return `<div class="agent">
+            <div class="ahead"><span class="dot ${a.tool==='codex'?'codex':''} ${live?'':'idle'}"></span>
+              <span class="nm">${esc(a.agent_id)}</span><span class="tool">${esc(a.tool||'')}</span>
+              <span class="age">${ago(a.last_heartbeat)}</span></div>
+            ${a.current_task?`<div class="task">${esc(a.current_task)}</div>`:""}
+            ${chips||rchips?`<div class="claims">${chips}${rchips}</div>`:""}
+          </div>`;
+        }).join("")}
+      </div>`).join("") || (s.error ? "" : '<div class="empty">no live agents</div>');
+
+    // Tasks board
+    const tasks = s.tasks || [];
+    $("#tasksWrap").style.display = tasks.length ? "block" : "none";
+    $("#tasksN").textContent = tasks.length;
+    $("#tasks").innerHTML = tasks.map(t => `<div class="row task-row">
+      <span class="st ${esc(t.status)}">${esc(t.status)}</span>
+      <span>${esc(t.title)}</span>
+      <span class="who">${esc(t.owner_agent||"unclaimed")}</span></div>`).join("");
+
+    // Queue
+    const q = s.queue || [];
+    $("#queueWrap").style.display = q.length ? "block" : "none";
+    $("#queueN").textContent = q.length;
+    $("#queue").innerHTML = q.map(x => `<div class="row"><span class="mono">${esc((x.key||"").split("||").pop())}</span><span class="who">${esc(x.agent_id)}</span></div>`).join("");
+
+    // Activity feed
+    $("#feed").innerHTML = (s.recent||[]).map(e => `<div class="row">
+      <span class="t">${esc((e.ts||"").slice(11,19))}</span>
+      <span class="ev ${esc(e.event)}">${esc(e.event)}</span>
+      <span>${esc(tail(e.detail)||"")}</span>
+      <span class="who">${esc(e.agent_id)}</span></div>`).join("") || '<div class="empty">none</div>';
+
+    tickUpdated();
+  }
+
+  function tickUpdated(){
+    if(last && last.generatedAt) $("#upd").textContent = "updated " + ago(last.generatedAt) + " ago";
+    else $("#upd").textContent = "";
+  }
+  setInterval(tickUpdated, 1000);
+
+  // Click a file chip → ask the extension to open it.
+  document.addEventListener("click", (e) => {
+    const c = e.target.closest(".chip[data-path]");
+    if(c && api) api.postMessage({ type: "open", path: c.getAttribute("data-path"), repo: c.getAttribute("data-repo") });
+  });
+
   window.addEventListener("message", (e) => render(e.data));
   if(api) api.postMessage({ type: "ready" });
 </script>

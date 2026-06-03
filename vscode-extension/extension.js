@@ -1,11 +1,23 @@
 const vscode = require("vscode");
 const { execFile } = require("node:child_process");
-const { readFileSync } = require("node:fs");
+const { readFileSync, existsSync } = require("node:fs");
 const { join } = require("node:path");
+const os = require("node:os");
 
-// VS Code's extension-host Node may not ship node:sqlite, so we never read the
-// store in-process — we shell out to the SYSTEM node running cli/state-json.mjs
-// and push the result into the webview. Zero extension dependencies.
+// Data path, in order of preference:
+//   1. Read ~/.agent-coord/snapshot.json directly. The Claude statusline rewrites
+//      it every few seconds, so while any agent is live it's fresh — and reading a
+//      file needs no subprocess, no node:sqlite, and no node>=22 on the extension
+//      host PATH (fnm's node lives at an ephemeral per-shell path the host can't
+//      see). This is the common, zero-config case.
+//   2. If the snapshot is missing or stale, shell out to the SYSTEM node running
+//      cli/state-json.mjs to read the store live (this also rewrites the snapshot).
+//      The repo path comes from the snapshot's own `root` field, else config/env.
+// Zero extension dependencies.
+
+const SNAPSHOT = join(os.homedir(), ".agent-coord", "snapshot.json");
+const STALE_MS = 12000; // snapshot older than this → try a live refresh via node
+const NODE_CANDIDATES = ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"];
 
 function nonce() {
   const c = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -22,34 +34,89 @@ function getHtml(ctx) {
   return html.replace(/__NONCE__/g, n);
 }
 
-function fetchState(cb) {
+function readSnapshot() {
+  try {
+    return JSON.parse(readFileSync(SNAPSHOT, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+const ageMs = (iso) => {
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) ? Date.now() - t : Infinity;
+};
+
+// Fallback: read the store live. Tries the configured node, then PATH `node`,
+// then common absolute installs. Roots itself from the snapshot or config/env.
+function fetchViaNode(snap, cb) {
   const cfg = vscode.workspace.getConfiguration("agentCoord");
-  // Portable: the setting wins, else AGENT_COORD_ROOT (setup.ps1 sets this), so
-  // the extension finds the project wherever it was cloned — no baked-in path.
-  const root = cfg.get("root") || process.env.AGENT_COORD_ROOT || "";
-  const node = cfg.get("node") || "node";
-  const empty = { agents: [], fileLeases: [], resourceLeases: [], queue: [], recent: [], degraded: false };
-  if (!root) return cb({ ...empty, error: "Set agentCoord.root (or the AGENT_COORD_ROOT env var) to your agent-coord clone path." });
-  execFile(node, ["--disable-warning=ExperimentalWarning", `${root}/cli/state-json.mjs`], { timeout: 8000, windowsHide: true }, (err, stdout) => {
-    if (err) return cb({ ...empty, error: err.message });
-    try {
-      cb(JSON.parse(stdout));
-    } catch {
-      cb({ ...empty, error: "bad json" });
-    }
-  });
+  const root = cfg.get("root") || (snap && snap.root) || process.env.AGENT_COORD_ROOT || "";
+  if (!root) return cb(null);
+  const configured = cfg.get("node");
+  const candidates = [configured, "node", ...NODE_CANDIDATES].filter(Boolean);
+  const script = join(root, "cli", "state-json.mjs");
+  let i = 0;
+  const tryNext = () => {
+    if (i >= candidates.length) return cb(null);
+    const node = candidates[i++];
+    execFile(node, ["--disable-warning=ExperimentalWarning", script], { timeout: 8000, windowsHide: true }, (err, stdout) => {
+      if (err) return tryNext();
+      try {
+        cb(JSON.parse(stdout));
+      } catch {
+        tryNext();
+      }
+    });
+  };
+  tryNext();
 }
 
 function startPolling(target) {
   const ms = vscode.workspace.getConfiguration("agentCoord").get("refreshMs") || 2000;
-  const poll = () => fetchState((s) => {
-    try {
-      target.postMessage(s);
-    } catch {}
-  });
+  const poll = () => {
+    const snap = readSnapshot();
+    if (snap && ageMs(snap.generatedAt) < STALE_MS) {
+      try {
+        target.postMessage(snap);
+      } catch {}
+      return;
+    }
+    // Snapshot missing or stale: attempt a live read, fall back to the old snapshot.
+    fetchViaNode(snap, (live) => {
+      let payload;
+      if (live) payload = live;
+      else if (snap) payload = { ...snap, stale: true };
+      else
+        payload = {
+          agents: [],
+          fileLeases: [],
+          resourceLeases: [],
+          queue: [],
+          tasks: [],
+          recent: [],
+          error: "No fleet data yet. Start a Claude or Codex session (its statusline keeps this view fresh). If agents are running and this persists, set agentCoord.root to your agent-coord clone.",
+        };
+      try {
+        target.postMessage(payload);
+      } catch {}
+    });
+  };
   poll();
   const handle = setInterval(poll, ms);
   return { stop: () => clearInterval(handle), poll };
+}
+
+// Open a claimed file in the editor when clicked in the webview. Lease paths are
+// repo-relative POSIX; resolve against the holding agent's repo_path.
+function openClaim(msg) {
+  if (!msg || !msg.path) return;
+  let abs = msg.path;
+  if (msg.repo && !abs.startsWith("/")) abs = join(msg.repo, msg.path);
+  vscode.workspace.openTextDocument(vscode.Uri.file(abs)).then(
+    (doc) => vscode.window.showTextDocument(doc, { preview: true }),
+    () => vscode.window.showWarningMessage(`agent-coord: couldn't open ${abs}`),
+  );
 }
 
 class FleetProvider {
@@ -61,6 +128,10 @@ class FleetProvider {
     view.webview.html = getHtml(this.ctx);
     const p = startPolling(view.webview);
     this.poll = p.poll;
+    view.webview.onDidReceiveMessage((m) => {
+      if (m && m.type === "open") openClaim(m);
+      if (m && m.type === "ready" && this.poll) this.poll();
+    });
     view.onDidDispose(() => p.stop());
   }
 }
@@ -77,6 +148,7 @@ function activate(ctx) {
       });
       panel.webview.html = getHtml(ctx);
       const p = startPolling(panel.webview);
+      panel.webview.onDidReceiveMessage((m) => m && m.type === "open" && openClaim(m));
       panel.onDidDispose(() => p.stop());
     }),
   );
