@@ -110,12 +110,48 @@ export const TOOL_DEFS = [
   {
     name: "claim_task",
     description:
-      "Claim a unit of work so peers know it's yours — the structural way to avoid two agents building the same thing. Pass `title` to create+claim a new task (deduped against existing titles), or `task_id` to claim an existing one from list_tasks. Fails if a LIVE peer already owns it. Optional `depends_on` (task ids) records ordering.",
-    inputSchema: { type: "object", properties: { title: { type: "string" }, task_id: { type: "string" }, detail: { type: "string" }, depends_on: { type: "array", items: { type: "string" } } } },
+      "Claim a unit of work so peers know it's yours — the structural way to avoid two agents building the same thing. Pass `title` to create+claim a new task (deduped against existing titles), or `task_id` to claim an existing one from list_tasks. Fails if a LIVE peer already owns it. Optional `depends_on` (task ids) records ordering; `priority` (higher = sooner) orders claim_next_task. Returns `handoff`: summaries from completed dependencies, so you start informed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        task_id: { type: "string" },
+        detail: { type: "string" },
+        depends_on: { type: "array", items: { type: "string" } },
+        priority: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "claim_next_task",
+    description:
+      "Pull the next unit of work from this repo's board: atomically claims the highest-priority READY task (all deps done, not owned by a live peer). Call when you finish something and have capacity, or when told to 'pick up work'. Returns the task plus `handoff` — what upstream tasks built — so you can start immediately. Empty board → granted:false; do something else.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "update_task",
-    description: "Update a task you're working: status one of open|claimed|done|blocked ('open' also releases it), and/or set detail. Mark it 'done' so dependent tasks unblock.",
-    inputSchema: { type: "object", properties: { task_id: { type: "string" }, status: { type: "string", enum: ["open", "claimed", "done", "blocked"] }, detail: { type: "string" } }, required: ["task_id"] },
+    description:
+      "Update a task you're working: status one of open|claimed|done|blocked ('open' also releases it). When marking 'done', PASS `summary` — 1-3 sentences on what you built/changed, where, and any gotchas. It's delivered to whoever depends on or later claims downstream work; without it they start blind. `detail` updates the task description.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string" },
+        status: { type: "string", enum: ["open", "claimed", "done", "blocked"] },
+        detail: { type: "string" },
+        summary: { type: "string" },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "record_decision",
+    description:
+      "Record a project-level decision (architecture, convention, library choice — e.g. topic 'auth', decision 'httpOnly JWT cookies, no localStorage') so parallel and future agents stay CONSISTENT. It's broadcast to live peers and shown in every new agent's session brief. Check list_decisions before deciding something that might already be decided; re-recording a topic supersedes it.",
+    inputSchema: { type: "object", properties: { topic: { type: "string" }, decision: { type: "string" } }, required: ["topic", "decision"] },
+  },
+  {
+    name: "list_decisions",
+    description: "The standing decisions for this repo (latest per topic). Consult before making architectural or convention choices so you don't contradict a peer's recorded decision.",
+    inputSchema: { type: "object", properties: {} },
   },
 ];

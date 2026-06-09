@@ -11,12 +11,15 @@ import { detectWriteTargets } from "../lib/bash-targets.mjs";
 import { writeCommitterMarker } from "../lib/committer.mjs";
 import { notify } from "../lib/notify.mjs";
 
-const short = (id) => String(id).replace(/-\d+$/, "");
+// PreToolUse on Bash/PowerShell: claim machine-wide singletons (dev port / dev
+// DB / deploy) the command would touch, blocking with exit 2 if another live
+// agent holds one. Also claims files the command would WRITE (Set-Content /
+// sed -i / redirects) — same lease as the edit guard, so shell edits block on a
+// peer's warm hold AND keep the holder's own lease warm. Also stamps a
+// committer marker on `git commit` so the pre-commit hook can tell a
+// self-commit from a cross-agent one. Fails open but loud.
 
-// PreToolUse on Bash: claim machine-wide singletons (dev port / dev DB / deploy)
-// the command would touch, blocking with exit 2 if another live agent holds one.
-// Also stamps a committer marker on `git commit` so the pre-commit hook can tell
-// a self-commit from a cross-agent one. Fails open but loud.
+const short = (id) => String(id).replace(/-\d+$/, "");
 
 function readInput() {
   try {
@@ -56,11 +59,13 @@ try {
       logActivity(db, { agentId, workspaceId: ws, event: "resource-claim", detail: r.resourceId });
     }
 
-    // Shell file mutations (sed -i / > / >> / tee / cp / mv / touch) bypass the
-    // Write/Edit guard. Claim each target the command would write, blocking only
-    // on a warm live peer — same self-healing guarantee as a normal edit. Only in
-    // a real repo (a room) — outside git there's nothing meaningful to contend on.
-    for (const path of repoRoot ? detectWriteTargets(command, repoRoot) : []) {
+    // Shell file mutations (sed -i / > / >> / tee / cp / mv / touch / Set-Content)
+    // bypass the Write/Edit guard. Claim each target the command would write,
+    // blocking only on a warm live peer — same self-healing guarantee as a normal
+    // edit, and the enqueue means you'll hear "✅ free now" mid-turn when it
+    // releases. Only in a real repo (a room); relative targets resolve against
+    // the command's cwd (often a subdir, not the root).
+    for (const path of repoRoot ? detectWriteTargets(command, repoRoot, cwd) : []) {
       const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: "bash-write" });
       if (!res.granted) {
         enqueue(db, { kind: "file", key: ws + "||" + path, agentId });

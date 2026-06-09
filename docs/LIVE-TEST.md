@@ -1,3 +1,34 @@
+# Live two-agent test — 2026-06-09 (cooperation tier)
+
+Second live validation with real `claude -p` agents (sonnet), this time of the
+cooperation tier: room brief, blocked→freed notification, and the task-handoff
+pipeline. Throwaway repo `B:\Coding\agent-coord-livetest\coop`; board pre-seeded
+with `t1` (auth module, prio 5) and `t2` (CLI wiring, depends on t1). Agent A
+(`cedar-marten-2628`) was told to claim t1 and work `src/auth.ts` warm; Agent B
+(`flint-egret-7259`) launched once A's lease existed, told to claim t2 and try
+the same file. **All four pillars passed:**
+
+- **Room brief** — B quoted it verbatim, unprompted: itself, A + A's task, and
+  the board (`1 claimed (t-4dee9d → cedar-marten)`). Arrived informed, zero
+  tool calls.
+- **Block → pivot** — B's first `src/auth.ts` edit was blocked (exit 2 naming
+  cedar-marten). B did NOT force-release or stall: it moved to `src/main.ts`
+  per protocol.
+- **Freed notification** — when A released, B's next mid-turn 📬 carried
+  `✅ "src/auth.ts" is free now…`; B quoted it and retried — its review line
+  landed in the file **44 s after the block**, with no blind retry loop and no
+  human.
+- **Handoff pipeline** — A marked t1 done with a real summary (named both
+  exported functions); B received it as a directed dependency-done message
+  (quoted it verbatim), then wired `src/main.ts` importing **exactly the two
+  functions the summary named**, and closed t2 with its own summary.
+
+Note: `claim_task` returned no `handoff` for B — correct, not a bug: B claimed
+t2 *before* t1 was done, so the context arrived via the dependency-done message
+instead (the designed flow for that ordering).
+
+---
+
 # Live two-agent test — 2026-06-02
 
 First validation with **real Claude Code agents** (spawned `claude -p` processes,

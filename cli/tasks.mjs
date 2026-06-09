@@ -43,7 +43,9 @@ console.log(`task board — ${repoRoot || "(no repo)"}\n`);
 for (const t of tasks) {
   const owner = t.owner ? dim(` @${t.owner.replace(/-\d+$/, "")}${t.ownerLive ? "" : " (offline)"}`) : "";
   const dep = t.blockedBy.length ? dim(` ⛓ waits: ${t.blockedBy.join(", ")}`) : "";
-  console.log(`  ${icon(t)} ${dim(t.task_id)}  ${t.title}${owner}${dep}`);
+  const prio = t.priority ? ` p${t.priority}` : "";
+  console.log(`  ${icon(t)} ${dim(t.task_id)}${prio}  ${t.title}${owner}${dep}`);
+  if (t.status === "done" && t.summary) console.log(dim(`      ↳ ${t.summary}`));
 }
 const n = (s) => tasks.filter((t) => t.status === s).length;
 console.log(dim(`\n  ${n("open")} open · ${n("claimed")} claimed · ${n("blocked")} blocked · ${n("done")} done`));

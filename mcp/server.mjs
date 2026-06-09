@@ -15,7 +15,8 @@ import { reap } from "../lib/reaper.mjs";
 import { pollSessionLink } from "../lib/session-link.mjs";
 import { reconcileServerIdentity } from "../lib/server-identity.mjs";
 import { findOverlappingPeers } from "../lib/overlap.mjs";
-import { createTask, claimTask, updateTask, listTasks } from "../lib/tasks.mjs";
+import { createTask, claimTask, claimNextTask, updateTask, listTasks } from "../lib/tasks.mjs";
+import { recordDecision, listDecisions } from "../lib/decisions.mjs";
 import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
 import { TOOL_DEFS } from "./tool-defs.mjs";
 
@@ -176,7 +177,7 @@ function handle(name, a) {
       let taskId = a.task_id;
       let created = false;
       if (!taskId && a.title) {
-        const c = createTask(db, { workspaceId: ws, title: a.title, detail: a.detail, dependsOn: a.depends_on, createdBy: agentId });
+        const c = createTask(db, { workspaceId: ws, title: a.title, detail: a.detail, dependsOn: a.depends_on, createdBy: agentId, priority: a.priority });
         taskId = c.taskId;
         created = c.created;
       }
@@ -184,13 +185,30 @@ function handle(name, a) {
       const r = claimTask(db, { taskId, agentId });
       if (!r.granted) return { ok: false, taskId, heldBy: r.conflict?.owner, error: r.error || `already claimed by ${r.conflict?.owner} — pick another task or coordinate` };
       logActivity(db, { agentId, workspaceId: ws, event: "task-claim", detail: taskId });
-      return { ok: true, taskId, note: created ? "created + claimed" : "claimed an existing task — a peer may have created it, check the board" };
+      return {
+        ok: true,
+        taskId,
+        handoff: r.handoff?.length ? r.handoff : undefined,
+        note: created ? "created + claimed" : "claimed an existing task — a peer may have created it, check the board",
+      };
+    }
+    case "claim_next_task": {
+      const r = claimNextTask(db, { workspaceId: ws, agentId });
+      if (r.granted) logActivity(db, { agentId, workspaceId: ws, event: "task-claim", detail: r.taskId });
+      return r;
     }
     case "update_task": {
-      const r = updateTask(db, { taskId: a.task_id, agentId, status: a.status, detail: a.detail });
+      const r = updateTask(db, { taskId: a.task_id, agentId, status: a.status, detail: a.detail, summary: a.summary });
       if (r.ok) logActivity(db, { agentId, workspaceId: ws, event: "task-update", detail: `${a.task_id} ${a.status || ""}`.trim() });
       return r;
     }
+    case "record_decision": {
+      const r = recordDecision(db, { workspaceId: ws, agentId, topic: a.topic, decision: a.decision });
+      if (r.ok) logActivity(db, { agentId, workspaceId: ws, event: "decision", detail: `[${r.topic}]` });
+      return r;
+    }
+    case "list_decisions":
+      return { decisions: listDecisions(db, { workspaceId: ws }) };
     default:
       throw new Error(`unknown tool: ${name}`);
   }

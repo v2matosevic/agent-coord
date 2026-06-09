@@ -38,20 +38,23 @@ try {
   const ws = workspaceId(repoRoot);
   ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
 
-  if (!fp) process.exit(0);
-  const path = canonicalFilePath(fp, repoRoot);
-
   if (POST) {
     heartbeat(db, agentId);
-    logActivity(db, { agentId, workspaceId: ws, event: "edit", detail: path });
-    // Mid-turn delivery: surface peer messages + duplicate-work advisory between
-    // tool calls so a heads-down agent actually hears them. Non-blocking.
+    // Shell calls (Bash/PowerShell) ride this hook too, with no file_path —
+    // they still heartbeat and deliver, so an agent deep in a test/build loop
+    // isn't deaf to peers; only the edit log needs a path.
+    if (fp) logActivity(db, { agentId, workspaceId: ws, event: "edit", detail: canonicalFilePath(fp, repoRoot) });
+    // Mid-turn delivery: surface peer messages, freed files we were blocked on,
+    // + duplicate-work advisory between tool calls. Non-blocking.
     try {
       const ctx = midTurnContext(db, { agentId, workspaceId: ws });
       if (ctx) process.stdout.write(postToolContextJson(ctx));
     } catch {}
     process.exit(0);
   }
+
+  if (!fp) process.exit(0);
+  const path = canonicalFilePath(fp, repoRoot);
 
   // Escalation (advisory -> block): if I'm the later-starter on overlapping work
   // and have already been advised enough times, my OWN guard stops me from
