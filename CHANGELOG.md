@@ -3,6 +3,65 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — cooperation tier (from collision-avoidance to actual teamwork)
+
+Built on Windows in parallel with the macOS expansion below, then reconciled
+(see the cross-machine note at the end of this entry). Every coordination loop
+used to be half-closed: a blocked agent re-polled blindly, a finished dependency
+notified nobody, a new agent arrived blind. This tier closes them — all
+additive, no schema-version bump, live fleet undisrupted.
+
+**Blocked-file notifications.** An exit-2 block already enqueued a waiter;
+nothing drained it. Now, when the file frees (holder released / went cold /
+died — evaluated lazily, no event source needed) the waiter hears
+`✅ "<path>" is free now` once, through the same mid-turn channel as peer
+messages. Granting a claim consumes your own waiter row. Shell-write blocks
+enqueue too, so they get the same notification. `+ test/waiter-notify.mjs`.
+
+**Task handoff — the board becomes a pipeline.** `update_task(done)` takes a
+`summary` (what was built, where, gotchas); owners of dependent tasks receive it
+as a directed message the moment they unblock, and `claim_task` /
+`claim_next_task` return completed-dependency summaries as `handoff`, so
+downstream work starts informed instead of blind. `+ test/handoff.mjs`.
+
+**`claim_next_task` + priority — a self-scheduling work pool.** Atomically pulls
+the highest-priority READY task (deps done, not held by a live peer, dead-owner
+reclaim included). Seed a board, point idle agents at it, they drain it.
+
+**Decision log.** The one root-cause failure nothing caught: two agents making
+*contradictory architectural choices in different files* (locks see same-file
+edits, overlap sees same-task text; neither sees "JWT here, sessions there").
+`record_decision(topic, decision)` is workspace-scoped, latest-per-topic,
+broadcast to the room (heard mid-turn) and shown to every arriving agent.
+`list_decisions` to consult. `+ test/decisions.mjs`.
+
+**Session-start room brief.** SessionStart stdout lands in context, so an
+arriving agent is briefed for free — live peers + their tasks, board state,
+standing decisions, waiting mail — without remembering to call any tool. Silent
+when there's nothing to say. Prompt-time delivery now uses the same channel as
+mid-turn (freed files + overlap advisories arrive at prompts too).
+
+**Fix: PowerShell tool bypassed the guards (Windows).** Found by dogfooding: the
+bash-guard matcher was `Bash` only, so commands run through Claude Code's
+PowerShell tool never claimed resources or stamped the committer marker — an
+agent's own PowerShell `git commit` was blocked as a "cross-agent" conflict.
+Matchers are now `Bash|PowerShell` (the installer migrates existing groups in
+place), and `guard.mjs --post` rides shell calls too, so an agent deep in a
+test/build loop still hears peers mid-turn.
+
+**Live-validated** with two real `claude -p` agents (see `docs/LIVE-TEST.md`):
+room brief quoted verbatim, block → pivot → freed-notification → retry in 44 s,
+and the dependency summary used to wire the downstream file correctly.
+
+**Cross-machine reconciliation note.** This tier and the macOS expansion were
+built concurrently on two machines, and both independently closed the
+shell-write gap — a textbook duplicate-work case the tool itself would have
+caught *within* one machine. The detectors were unified into
+`lib/bash-targets.mjs` (the tokenizer architecture, extended with PowerShell
+cmdlets `Set-Content`/`Add-Content`/`Out-File`, `$null`/`nul` sink rejection,
+unexpandable-variable rejection, and cwd-relative target resolution).
+MCP tools now 24; suite 25 files, green on Windows 11 + macOS.
+
 ## 1.0.1 — resume identity reconciliation (no more ghost twins)
 
 Root-cause fix for the split this session surfaced: the MCP server resolved its

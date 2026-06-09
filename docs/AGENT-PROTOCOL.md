@@ -7,10 +7,17 @@ shared store. This is how you stay in sync instead of stepping on each other.
 
 ## What's automatic (you don't have to remember)
 
+- At session start you get a **room brief** in context: live peers + their tasks,
+  the task board, standing decisions, waiting mail. You arrive informed — no
+  tool calls needed.
 - Before any `Write`/`Edit`/`MultiEdit`, a hook **claims the file**. If another
   live agent holds it you get a **blocked tool call (exit 2)** naming the holder.
-- Before risky `Bash` (dev server, `drizzle-kit push`/migrations, deploy) a hook
-  **claims the machine-wide resource**; a colliding second one is blocked.
+- **If you were blocked, you'll be told when it frees** — a `✅ "<path>" is free
+  now` line arrives mid-turn the moment the holder releases / goes cold / dies.
+  No blind retry loop needed: do other work and act when it arrives.
+- Before risky shell commands (`Bash` **or `PowerShell`**: dev server,
+  `drizzle-kit push`/migrations, deploy) a hook **claims the machine-wide
+  resource**; a colliding second one is blocked.
 - `git commit` is gated globally: it's **rejected** if you stage a file another
   live agent holds. (This is the net that also catches Codex / manual commits.)
 
@@ -70,8 +77,17 @@ thing in parallel. Guard against it:
 - **Claim the work, not just the files.** Check the shared task board
   (`list_tasks`) before picking up work, then `claim_task` the unit you'll do
   (pass a `title` to create+claim, or a `task_id` from the board). A peer then
-  *sees* it's taken — the structural fix for duplication. Mark it `done` with
-  `update_task` so dependent tasks unblock. `node cli/tasks.mjs` shows the board.
+  *sees* it's taken — the structural fix for duplication. `node cli/tasks.mjs`
+  shows the board.
+- **Hand off, don't just finish.** Mark a task `done` with `update_task` AND a
+  `summary` — 1-3 sentences on what you built, where, and any gotchas. Whoever
+  depends on your task gets it as a directed message the moment they unblock,
+  and whoever claims downstream work receives it as `handoff`. A bare `done`
+  makes them start blind.
+- **Idle? Pull work.** `claim_next_task` atomically claims the highest-priority
+  READY task on this repo's board (deps done, not owned by a live peer) and
+  returns it with the upstream handoff. Seeded board + idle agents = the fleet
+  schedules itself. Set `priority` on tasks you create to order the pull.
 - **Announce first.** `announce_intent` also returns a `warning` if a live peer
   in this repo is already on similar work. If you're the **later starter**, you
   yield: narrow your lane (re-announce a distinct sub-task — that clears the
@@ -87,6 +103,21 @@ thing in parallel. Guard against it:
   force-releasing their locks or asking the human to kill them. They hear it
   mid-turn; if they agree they release and stop. Reserve it for when you're
   provably duplicating and you have priority (started first / verified version).
+
+## Record decisions — stay architecturally coherent
+
+Locks catch same-file edits and the overlap check catches same-task text — but
+neither catches two agents making **contradictory choices in different files**
+("JWT in this route, server sessions in that one"). The decision log does:
+
+- **Before** an architectural or convention choice (auth model, library, naming,
+  API shape), check `list_decisions` — a peer may have already decided it.
+- **After** making one that constrains others, `record_decision(topic, decision)`
+  — e.g. topic `auth`, decision `httpOnly JWT cookies, no localStorage`. Live
+  peers hear it mid-turn (📬) and every newly arriving agent sees the current
+  set in its session brief.
+- Disagree with a recorded decision? Don't silently contradict it — `post_message`
+  the author (re-recording the same topic supersedes it, so converge first).
 
 ## Before pushing commits you didn't make
 

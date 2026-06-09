@@ -111,23 +111,24 @@ lib/
   agents.mjs       ensureAgent (upsert+heartbeat), heartbeat, markDead, agentAlive
   leases.mjs       claimFile/releaseFile/peekConflicts, claimResource/releaseResource, enqueue, releaseAllForAgent
   overlap.mjs      duplicate-work detection (task Jaccard) + tiebreaker + advisory throttle/escalation
-  tasks.mjs        shared task board — createTask (dedup) / claimTask (atomic, dead-owner reclaim) / updateTask / listTasks (deps readiness)
-  coord-context.mjs midTurnContext() — peer messages + overlap advisory as PostToolUse additionalContext
+  tasks.mjs        shared task board — createTask (dedup, priority) / claimTask (atomic, dead-owner reclaim, returns handoff) / claimNextTask (pull best READY task) / updateTask (summary on done -> notify dependents) / listTasks (deps readiness)
+  decisions.mjs    decision log — recordDecision (broadcast to room) / listDecisions (latest per topic)
+  room-brief.mjs   buildRoomBrief() — session-start context: peers, board, decisions, unread
+  coord-context.mjs midTurnContext() — peer messages + freed files I was blocked on + overlap advisory (PostToolUse additionalContext / UserPromptSubmit stdout)
   activity.mjs     logActivity, getFleet, queueDepth, recentActivity, getGlobalState
   insights.mjs     shared read-only analysis — collisionHotspots (same file, 2+ agents) + pathHistory (powers query_history)
   notify.mjs       native desktop notifications (macOS) — block / message / yield; throttled, detached, fail-safe
-  bash-targets.mjs detectWriteTargets — files a shell command writes (sed -i / > / >> / tee / cp / mv / touch); quote-aware, repo-only
+  bash-targets.mjs detectWriteTargets — files a shell command writes (sed -i / > / >> / tee / cp / mv / touch / Set-Content / Add-Content / Out-File); quote-aware tokenizer, repo-only, cwd-relative
+  snapshot.mjs     atomic JSON mirror of the fleet → ~/.agent-coord/snapshot.json (written by the statusline tick + state-json); stamps generatedAt + clone root
   reaper.mjs       reap() + reapThrottled() — GC dead agents / expired leases / stale links; wal_checkpoint
   config.mjs       FILE_TTL_SEC, RESOURCE_TTL_SEC, DEAD_MS (3 min), FILE_ACTIVE_MS (5 min warm window), OVERLAP_*, NOTIFY_*, SCHEMA_VERSION
 hooks/
-  session.mjs      register / prompt / subagent-start / subagent-stop / release
-  guard.mjs        PreToolUse file claim-or-block (exit 2) + notify on block; --post = heartbeat + log + mid-turn delivery
-  bash-guard.mjs   PreToolUse Bash: resource + shell-write-target claim-or-block + committer marker
+  session.mjs      register (+ room brief) / prompt (mid-turn-context delivery) / subagent-start / subagent-stop / release
+  guard.mjs        PreToolUse file claim-or-block (exit 2) + notify on block; --post = heartbeat + log + mid-turn delivery (shell calls too)
+  bash-guard.mjs   PreToolUse Bash|PowerShell: resource + shell-write-target claim-or-block + committer marker
 mcp/
-  server.mjs       stdio MCP server (21 tools); one process = one agent
+  server.mjs       stdio MCP server (24 tools); one process = one agent
   tool-defs.mjs    JSON-Schema tool catalog
-lib/
-  snapshot.mjs     atomic JSON mirror of the fleet → ~/.agent-coord/snapshot.json (written by the statusline tick + state-json); stamps generatedAt + clone root
 cli/
   statusline.mjs   Claude status line — leads with THIS terminal's own id + its subagents, then the fleet (⚠ CONTENDED / DEGRADED); also rewrites snapshot.json each tick
   status.mjs       one-shot fleet table        watch.mjs   terminal live view
@@ -143,18 +144,18 @@ vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-i
                    falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
-test/              path-aliasing · concurrency · resource · precommit · mcp-smoke · liveness ·
-                   git-switch · schema-guard · subagent · notify · bash-targets · bash-guard-block ·
-                   insights  (+ helpers)
+test/              25 files — locks/board/messaging/overlap/identity/cooperation/shell-writes/insights (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
 Data model: see `lib/store.mjs` `SCHEMA`. Key tables — `agents` (id, tool, pid,
 repo, branch, task, status, last_heartbeat), `file_leases` (workspace_id, path,
-agent_id, mode, expires_at), `resource_leases`, `lease_queue`, `activity_log`,
+agent_id, mode, expires_at), `resource_leases`, `lease_queue` (block-time waiter
+rows, drained by `freedFileWaits` for the freed-file notify), `activity_log`,
 `messages` (workspace-scoped agent-to-agent mailbox) + `message_reads` (per-agent
 read pointer), `tasks` (workspace-scoped shared task board — owner, status,
-`depends_on`).
+`depends_on`, `summary` handoff, `priority`), `decisions` (workspace-scoped
+decision log, latest per topic).
 
 ---
 
@@ -176,11 +177,12 @@ cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 setup.mjs                       # (re)install everything, idempotent, any OS (setup.ps1 = Windows + VS Code panel)
 ```
 
-MCP tools (21, in Claude + Codex): whoami, announce_intent, list_active_agents,
+MCP tools (24, in Claude + Codex): whoami, announce_intent, list_active_agents,
 get_global_state, check_conflicts, claim_files (returns a `hotspot` warning on
 known multi-agent files), release_files, claim_resource, release_resource,
 log_activity, post_message, read_messages, pending_push_review, ask_agent,
-check_replies, reply, request_yield, query_history, list_tasks, claim_task, update_task.
+check_replies, reply, request_yield, query_history, list_tasks, claim_task,
+claim_next_task, update_task, record_decision, list_decisions.
 
 ---
 
@@ -222,20 +224,25 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-21 tests (run isolated via `AGENT_COORD_HOME`): `path-aliasing`, `concurrency`
+25 tests (run isolated via `AGENT_COORD_HOME`): `path-aliasing` (platform-aware),
+`concurrency`
 (30→1), `cold-lease` (warm blocks, cold self-heals on takeover), `tasks` (board:
-create/dedup/claim-race/dead-owner-reclaim/deps), `resource`,
+create/dedup/claim-race/dead-owner-reclaim/deps), `waiter-notify` (block →
+enqueue → free → notify exactly once), `handoff` (done→notify with
+summary+readiness, claim returns handoff, claim_next_task pull order),
+`decisions` (record/supersede/broadcast + room brief), `bash-targets`
+(shell-write detection: redirects/sed/tee/cp/mv/PowerShell cmdlets + the
+quote/heredoc/fd/null-sink false-positive guards), `bash-guard-block` (the live
+shell hook blocks a write to a peer-held file), `notify` (plan/throttle/disabled,
+dry-run — no real banners), `insights` (collision hotspots + path history),
+`server-identity` (standalone server late-adopts the hook id), `resource`,
 `resource-keyword`, `precommit` (cross-agent vs self),
 `pending-push`, `mcp-smoke` (real MCP client), `liveness` (dead-holder + reap),
 `git-switch` (room invariant), `schema-guard`, `subagent` (distinct ids + sibling
 lock), `messages` (workspace-scoped, directed, read-once, no self-delivery),
 `overlap` + `overlap-flow` (duplicate-work detection, tiebreaker, advisory→escalate
 →clear), `session-link` (claude.exe handshake: a `--tool claude-code` MCP server
-adopts the published id end-to-end; Codex stays standalone), `notify` (plan/throttle/
-disabled, dry-run so no real banners), `bash-targets` (shell-write detection + the
-quote/heredoc/fd false-positive guards), `bash-guard-block` (the live Bash hook blocks
-a write to a peer-held file), `insights` (collision hotspots + path history). Proven on
-**Windows 11** and **macOS (Apple Silicon)** — `cli/doctor.mjs` = 9/9, suite 21/21 on both.
+adopts the published id end-to-end; Codex stays standalone). `cli/doctor.mjs` = 9/9.
 
 ---
 
@@ -295,6 +302,31 @@ a write to a peer-held file), `insights` (collision hotspots + path history). Pr
   by its own guard if it keeps duplicating (escape hatch: announce a distinct
   lane). `request_yield` lets the priority agent ask a peer to stand down instead
   of force-releasing locks or a human kill.
+- **Cooperation tier (2026-06): close every half-open loop.** The prevention
+  layer (locks, overlap, commit net) was done; what remained was that every
+  coordination event died in a table nobody read back. Four loops closed, all
+  additive (no `SCHEMA_VERSION` bump): (1) **freed-file notify** — guard blocks
+  already enqueued waiters into `lease_queue`; `freedFileWaits` drains them
+  *lazily* at delivery time (release, cold-expiry, death, and reap all look
+  identical to a lazy check — no event source needed, which is why this is
+  ~40 lines instead of a pub/sub layer). (2) **Task handoff** — `summary` on
+  done → directed message to dependents' owners + `handoff` returned on claim;
+  the board went from "don't duplicate" to an actual pipeline. (3)
+  **`claim_next_task`** — atomic pull of the best READY task; idle agents drain
+  a seeded board (work-stealing without a scheduler). (4) **Decision log** —
+  covers the failure no other mechanism saw: contradictory architecture
+  choices in *different* files; broadcast rides the existing message channel,
+  durable rows feed the brief. Plus the **session-start room brief**
+  (SessionStart stdout → context: arrive informed, zero tool calls) and
+  prompt-time delivery unified onto `midTurnContext`.
+- **PowerShell guard coverage (found by dogfooding).** The bash-guard matcher
+  was `Bash` only; Claude Code on Windows routes shell work through the
+  `PowerShell` tool (same `tool_input.command` shape), so resource guards and
+  the committer marker silently didn't fire — an agent's own PowerShell
+  `git commit` was rejected by the pre-commit net as "cross-agent". Matchers
+  are now `Bash|PowerShell`; the installer migrates existing matcher groups in
+  place. `guard.mjs --post` also rides shell calls (no `file_path` → heartbeat
+  + delivery only), so long test/build loops aren't deaf to peers.
 - **Shared task board (`tasks.mjs` + `cli/tasks.mjs`).** The *structural* version
   of the above: agents `claim_task` discrete units of work (atomic claim — one
   winner under a race, like file leases), so a peer simply sees a task is taken
@@ -320,7 +352,8 @@ a write to a peer-held file), `insights` (collision hotspots + path history). Pr
 ## 11. Open / next
 
 - **Live validation** with two real agents under actual load (the one thing code
-  can't replace) — tune `DEAD_MS` / TTLs from what's observed.
+  can't replace) — tune `DEAD_MS` / TTLs from what's observed. *(Done twice — see
+  `LIVE-TEST.md`: 2026-06-02 locks + push handoff; 2026-06-09 cooperation tier.)*
 - PID-reuse liveness guard (deferred, see §9).
 - Possible: per-line granularity, shared-lease serial-list, auth boundary (only
   if this stops being a single-user machine).
@@ -330,11 +363,13 @@ a write to a peer-held file), `insights` (collision hotspots + path history). Pr
 Windows junction; platform-aware path test); a SwiftBar/xbar **menu-bar fleet**
 (`cli/macos-menubar.mjs`), **native desktop notifications** on block/message/yield
 (`lib/notify.mjs`), a **shell-write guard** so `sed -i`/`>`/`tee`/`cp`/`mv` don't
-bypass the file lock (`lib/bash-targets.mjs`), and the **self-learning** digest +
-hotspot warnings + `query_history` (§12).
+bypass the file lock (`lib/bash-targets.mjs`, later unified with the Windows-side
+PowerShell detection), and the **self-learning** digest + hotspot warnings +
+`query_history` (§12).
 
 Build log: `6c3742e` (Tier 0–1 global), `d54f076` (dashboard), `503ecd2` (worktree +
-subagent + hardening); macOS port + expansion `36b587d`…`f390922`.
+subagent + hardening); macOS port + expansion `36b587d`…`f390922` (public main);
+cooperation tier + reconciliation 2026-06-09 (this repo).
 
 ---
 
@@ -355,18 +390,13 @@ The compounding loop: **act → record → distill → inform → act.**
 Accumulate structured observations → periodically summarize the durable ones into
 memory the next agent reads. That is the whole mechanism; anything fancier is hype.
 
-**Build order:**
-- NOW: `cli/insights.mjs`. ✅ Shipped; proved real signal (caught a double-deploy +
-  concurrent memory edits on the live store), so the lane continued.
-- LATER → **BUILT** (insights proved signal): `cli/digest.mjs` writes a durable
-  per-project hotspot record — high threshold (`--min-agents`), update-not-duplicate
-  (one regenerated file per project), to **`~/.agent-coord/digests/`**, deliberately
-  NOT the hand-curated vault or client repos; a `hotspot` warning is surfaced in
-  `claim_files`; and a `query_history` MCP tool answers "who touched this lately."
-  The analysis is one shared `lib/insights.mjs`. (Still optional: a SessionStart-
-  throttled auto-run of the digest.)
-- CUT (still cut): a model-curated "summarize my work" auto-note writer — it pollutes
-  the hand-curated vault that models Marko; and scheduling a writer before it's proven.
+**Build order (gated on the still-pending two-agent live test):**
+- NOW: `cli/insights.mjs`. If its output is boring, the lane stops here — cheaply.
+- LATER (only once insights proves there's signal): a `digest` that writes scoped
+  per-project memory notes (high threshold, update-not-duplicate); hotspot warnings
+  surfaced in `claim_files`; a `query_history` MCP tool; SessionStart-throttled run.
+- CUT: a model-curated "summarize my work" auto-note writer — it pollutes the
+  hand-curated vault that models Marko; and scheduling a writer before it's proven.
 
 **Privacy (hard rules — the store is single-user but mixes clients):**
 - Distill reads **only** `activity_log` — **never** `agents.current_task` (verbatim

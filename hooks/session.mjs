@@ -4,8 +4,9 @@ import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded } from "../lib/store.mjs";
 import { ensureAgent, markDead, heartbeat } from "../lib/agents.mjs";
 import { releaseAllForAgent } from "../lib/leases.mjs";
-import { readMessages } from "../lib/messages.mjs";
 import { logActivity } from "../lib/activity.mjs";
+import { midTurnContext } from "../lib/coord-context.mjs";
+import { buildRoomBrief } from "../lib/room-brief.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { findClaudePid } from "../lib/proc-ancestry.mjs";
@@ -57,21 +58,21 @@ try {
       const pids = new Set([cachedClaudePid(input.session_id), findClaudePid(process.ppid)].filter(Boolean));
       for (const pid of pids) writeSessionLink(pid, agentId, input.session_id);
     } catch {}
+    // Room brief: SessionStart stdout lands in context, so the agent arrives
+    // knowing who's here, the board, and standing decisions — no tool calls.
+    try {
+      const brief = buildRoomBrief(db, { agentId, workspaceId: workspaceId(repoRoot), repoRoot });
+      if (brief) process.stdout.write(brief + "\n");
+    } catch {}
   } else if (MODE === "prompt") {
     const { repoRoot, branch } = ctx();
     ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
     const task = typeof input.prompt === "string" ? input.prompt.replace(/\s+/g, " ").trim().slice(0, 100) : null;
     if (task) heartbeat(db, agentId, task);
-    // Deliver unread peer messages into context (UserPromptSubmit stdout is injected).
-    const ws = workspaceId(repoRoot);
-    const msgs = readMessages(db, { agentId, workspaceId: ws });
-    if (msgs.length) {
-      process.stdout.write(
-        "📬 agent-coord — new messages from other agents in this workspace:\n" +
-          msgs.map((m) => `  • ${m.from_agent}${m.to_agent ? " (to you)" : ""}: ${m.body}`).join("\n") +
-          "\n",
-      );
-    }
+    // Same delivery as mid-turn (messages + freed files + overlap advisory) —
+    // UserPromptSubmit stdout is injected into context.
+    const ctxText = midTurnContext(db, { agentId, workspaceId: workspaceId(repoRoot) });
+    if (ctxText) process.stdout.write(ctxText + "\n");
   } else if (MODE === "sub-start") {
     const { repoRoot, branch } = ctx();
     ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch, task: input.agent_type || "subagent" });
