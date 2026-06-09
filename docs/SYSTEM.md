@@ -82,10 +82,14 @@ All commands run as `node --disable-warning=ExperimentalWarning "$AGENT_COORD/<s
 
 ### git — global `core.hooksPath` (every repo on the machine)
 
-`git config --global core.hooksPath %USERPROFILE%/.agent-coord/githooks`. The
-hook runs `cli/precommit-check.mjs`; **fails open** (only a real cross-agent
-conflict, rc=1, blocks) and **chains** to any repo-local `.git/hooks/pre-commit`
-(skipping our own). Prior value saved to `~/.agent-coord/git-hookspath.prior`.
+`git config --global core.hooksPath %USERPROFILE%/.agent-coord/githooks`. Three
+hooks, all **fail open** (only rc=1 blocks) and all **chain** to any repo-local
+hook (skipping our own): `pre-commit` (`cli/precommit-check.mjs` — the
+cross-agent commit net), `post-commit` (provenance logging, never blocks), and
+`pre-push` (`cli/prepush-check.mjs` — blocks `wip/*` snapshot branches of
+uncommitted work from reaching a PUBLIC GitHub remote; deletions exempt;
+`AGENT_COORD_ALLOW_PUBLIC_WIP=1` overrides). Prior value saved to
+`~/.agent-coord/git-hookspath.prior`.
 
 ### MCP server — Codex + Claude (global)
 
@@ -120,6 +124,7 @@ lib/
   notify.mjs       native desktop notifications (macOS) — block / message / yield; throttled, detached, fail-safe
   bash-targets.mjs detectWriteTargets — files a shell command writes (sed -i / > / >> / tee / cp / mv / touch / Set-Content / Add-Content / Out-File); quote-aware tokenizer, repo-only, cwd-relative
   snapshot.mjs     atomic JSON mirror of the fleet → ~/.agent-coord/snapshot.json (written by the statusline tick + state-json); stamps generatedAt + clone root
+  public-remote.mjs parseGitHubRepo + cached unauthenticated-API visibility oracle + wip-ref parsing (powers the pre-push guard)
   reaper.mjs       reap() + reapThrottled() — GC dead agents / expired leases / stale links; wal_checkpoint
   config.mjs       FILE_TTL_SEC, RESOURCE_TTL_SEC, DEAD_MS (3 min), FILE_ACTIVE_MS (5 min warm window), OVERLAP_*, NOTIFY_*, SCHEMA_VERSION
 hooks/
@@ -144,7 +149,7 @@ vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-i
                    falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
-test/              25 files — locks/board/messaging/overlap/identity/cooperation/shell-writes/insights (+ helpers)
+test/              26 files — locks/board/messaging/overlap/identity/cooperation/shell-writes/insights/prepush-guard (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
@@ -224,7 +229,9 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-25 tests (run isolated via `AGENT_COORD_HOME`): `path-aliasing` (platform-aware),
+26 tests (run isolated via `AGENT_COORD_HOME`): `prepush-guard` (public-remote
+WIP guard: URL parse / push matrix / visibility oracle / cache),
+`path-aliasing` (platform-aware),
 `concurrency`
 (30→1), `cold-lease` (warm blocks, cold self-heals on takeover), `tasks` (board:
 create/dedup/claim-race/dead-owner-reclaim/deps), `waiter-notify` (block →

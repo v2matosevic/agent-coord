@@ -3,6 +3,21 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — public-remote WIP guard (pre-push)
+
+New universal-chokepoint net, same philosophy as the pre-commit guard: a global
+**pre-push hook** blocks `wip/*` snapshot branches — the carrier some
+machine-sync tooling force-pushes with your UNCOMMITTED work — from landing on
+a **public** GitHub remote, no matter which tool pushes. Observed live before
+the fix: two dirty-tree snapshots auto-pushed to this very repo. Visibility
+oracle = an unauthenticated GitHub API probe (200 ⇒ public by definition),
+disk-cached 7d; non-wip pushes never touch the network. Deleting a `wip/*` ref
+stays allowed (cleanup must always work), unknown visibility fails open-but-loud,
+`AGENT_COORD_ALLOW_PUBLIC_WIP=1` is the deliberate escape hatch, and a
+repo-local pre-push still chains. `+ lib/public-remote.mjs`,
+`cli/prepush-check.mjs`, `test/prepush-guard.mjs`; re-run the installer
+(`node setup.mjs`) to get the hook.
+
 ## Recent — single trunk; machine-local wiring untracked
 
 This repo's `main` is now the one trunk both dev machines work on (the old

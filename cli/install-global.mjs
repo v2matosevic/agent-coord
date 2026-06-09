@@ -52,6 +52,30 @@ try {
   chmodSync(postTarget, 0o755);
 } catch {}
 
+// pre-push: block wip/* snapshot branches (uncommitted work, force-pushed by
+// machine-sync tooling) from landing on a PUBLIC GitHub remote. Same posture as
+// pre-commit: fail OPEN (only rc=1 blocks), chain to a repo-local pre-push.
+// stdin (the pushed-refs list) is captured once and replayed to both consumers.
+const PREPUSH = `#!/bin/sh
+# agent-coord global pre-push (public-remote WIP guard)
+INPUT=$(cat)
+printf '%s\\n' "$INPUT" | node --disable-warning=ExperimentalWarning "${ROOT}/cli/prepush-check.mjs" "$@"
+rc=$?
+[ "$rc" = "1" ] && exit 1
+GITDIR=$(git rev-parse --git-dir 2>/dev/null)
+LOCAL="$GITDIR/hooks/pre-push"
+if [ -n "$GITDIR" ] && [ -x "$LOCAL" ] && ! grep -q "agent-coord" "$LOCAL" 2>/dev/null; then
+  printf '%s\\n' "$INPUT" | "$LOCAL" "$@"
+  exit $?
+fi
+exit 0
+`;
+const prepushTarget = join(dir, "pre-push");
+writeFileSync(prepushTarget, PREPUSH);
+try {
+  chmodSync(prepushTarget, 0o755);
+} catch {}
+
 let prior = "";
 try {
   prior = execFileSync("git", ["config", "--global", "--get", "core.hooksPath"], { encoding: "utf8" }).trim();
@@ -61,7 +85,7 @@ writeFileSync(join(COORD_HOME, "git-hookspath.prior"), prior || "(unset)");
 const posixDir = dir.replace(/\\/g, "/");
 execFileSync("git", ["config", "--global", "core.hooksPath", posixDir]);
 
-console.log("✅ global pre-commit + post-commit installed for ALL repos");
+console.log("✅ global pre-commit + post-commit + pre-push installed for ALL repos");
 console.log("   core.hooksPath ->", posixDir);
 console.log("   prior value:", prior || "(unset)", "(saved to git-hookspath.prior)");
 console.log("   revert: git config --global --unset core.hooksPath" + (prior ? `  # was ${prior}` : ""));
