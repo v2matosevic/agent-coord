@@ -65,7 +65,7 @@ writeTxn(db, () => {
 const raceTask = createTask(db, { workspaceId: ws, title: "race target " + process.pid });
 const N = 12;
 const kids = Array.from({ length: N }, (_, i) =>
-  spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", join(root, "test", "task-claim-worker.mjs"), ws, raceTask.taskId, `race-${process.pid}-${i}`, repo], {
+  spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", join(root, "test", "_task-claim-worker.mjs"), ws, raceTask.taskId, `race-${process.pid}-${i}`, repo], {
     env: { ...process.env },
     encoding: "utf8",
   }),
