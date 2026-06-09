@@ -3,6 +3,16 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — single trunk; machine-local wiring untracked
+
+This repo's `main` is now the one trunk both dev machines work on (the old
+private-history branch is archived locally, never pushed). `.claude/` is no
+longer tracked: it held one machine's Hermes auto-sync session hooks, which are
+per-machine wiring — and in a public repo, every cloner was inheriting them.
+**If you had those hooks via this repo: after pulling, re-run
+`hermes hook install` once — the file it writes is now gitignored, so your
+sync keeps working but stays local.**
+
 ## Recent — cooperation tier (from collision-avoidance to actual teamwork)
 
 Built on Windows in parallel with the macOS expansion below, then reconciled
