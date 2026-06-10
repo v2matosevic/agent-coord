@@ -4,6 +4,16 @@
   "private": true,
   "type": "module",
   "description": "Universal cross-agent coordination + awareness layer for AI coding agents",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/v2matosevic/Version2-Agent-Coordination.git"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning test/run-all.mjs",
+    "doctor": "node --disable-warning=ExperimentalWarning cli/doctor.mjs",
+    "setup": "node setup.mjs"
+  },
   "engines": {
     "node": ">=22"
   },

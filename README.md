@@ -1,9 +1,16 @@
-# Version2 — Agent Coordination (`agent-coord`)
+# agent-coord
+
+[![CI](https://github.com/v2matosevic/Version2-Agent-Coordination/actions/workflows/ci.yml/badge.svg)](https://github.com/v2matosevic/Version2-Agent-Coordination/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Node ≥ 22](https://img.shields.io/badge/node-%E2%89%A5%2022-brightgreen.svg)](https://nodejs.org)
+![Platforms](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-8a8076.svg)
 
 **A machine-wide coordination layer so multiple AI coding agents running at once
 don't step on each other.** Shared presence, file locks, a universal git commit
 guard, agent-to-agent messaging, and duplicate-work detection — across every
 terminal, window, and repo on your machine.
+
+![The live dashboard: agents grouped by repo, the file each one holds, resource leases, and the activity feed](./docs/assets/dashboard.png)
 
 Built on Node's built-in `node:sqlite` (WAL). The hooks and CLI are **zero-dependency**;
 only the MCP server pulls one package (`@modelcontextprotocol/sdk`). No native
@@ -160,11 +167,11 @@ within a short window so a retried edit never spams.
 ## Tests
 
 ```bash
-# isolated store via AGENT_COORD_HOME; all green
-node test/concurrency.mjs   node test/cold-lease.mjs   node test/overlap.mjs
-node test/session-link.mjs  node test/messages.mjs     node test/precommit.mjs
-node test/liveness.mjs      node test/mcp-smoke.mjs     node test/git-switch.mjs
+npm test                          # full suite, each test in an isolated throwaway store
+node test/run-all.mjs messages    # filter by name
 ```
+
+CI runs the suite on Windows, macOS, and Linux (Node 22 + 24) on every push and PR.
 
 ## Uninstall
 
@@ -192,6 +199,12 @@ in the store. See [`DESIGN.md` §9](./DESIGN.md) for the full list.
 - [`docs/FUTURE.md`](./docs/FUTURE.md) — roadmap beyond the macOS expansion.
 - [`CHANGELOG.md`](./CHANGELOG.md) — what's been built.
 - [`docs/LIVE-TEST.md`](./docs/LIVE-TEST.md) — first live two-agent validation.
+
+## Contributing & security
+
+PRs welcome — read [`CONTRIBUTING.md`](./CONTRIBUTING.md) first (zero-dependency
+rule, fail-open invariant, test expectations). Security model and how to report
+a vulnerability: [`SECURITY.md`](./SECURITY.md). Licensed [MIT](./LICENSE).
 
 ---
 

@@ -137,7 +137,7 @@ reflexively ask the human "should I push these?" — work it out:
    - **ask-human / unknown** — provenance unknown → genuinely the human's call.
 3. Mark your own not-yet-ready commits `wip:` so peers hold them automatically.
 
-**Auto-push when clear (Marko's standing choice):** if `pending_push_review` returns
+**Auto-push when clear (the operator's standing choice):** if `pending_push_review` returns
 `allClear: true` — every unpushed commit is push-safe (yours or finished peers, no
 WIP, nothing ambiguous) — **push without asking the human.** Only stop to ask when
 there are blockers (WIP / live-peer / unknown author).

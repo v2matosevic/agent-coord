@@ -1,0 +1,24 @@
+name: Feature request
+description: A coordination gap or a new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: The multi-agent scenario
+      description: This project is driven by real collisions. What actually happened (or keeps happening) between your agents that this would solve?
+      placeholder: "I run N agents across M repos and they keep…"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should agent-coord do? Advisory (warn/inform) or enforcing (block)?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds you've tried
+      placeholder: "Worktrees per agent, telling agents about each other in prompts, …"
