@@ -3,6 +3,18 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.1.0 — open-source release readiness
+
+The repo is now a proper public open-source project, not just a public repo:
+MIT `LICENSE`; CI running the full suite on Windows/macOS/Linux × Node 22/24
+on every push and PR; `npm test` via a new `test/run-all.mjs` runner (every
+non-underscore test, each in its own throwaway store); `CONTRIBUTING.md`
+(zero-dependency rule, fail-open invariant, test expectations); `SECURITY.md`
+(single-user threat model + private vulnerability reporting); issue and PR
+templates; README badges + a dashboard screenshot (seeded demo fleet) and a
+social-preview card under `docs/assets/`. Operator-specific names in the
+public docs genericized.
+
 ## Recent — messaging is machine-local by design; quieter banners
 
 Boundary made explicit after an agent assumed otherwise: the store is one
