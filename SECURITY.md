@@ -32,7 +32,7 @@ crafted file paths or messages, the pre-commit net being bypassable in a way the
 docs don't already disclose, or anything that escalates beyond the single-user
 model), please report it privately:
 
-- **GitHub**: use [private vulnerability reporting](https://github.com/v2matosevic/Version2-Agent-Coordination/security/advisories/new)
+- **GitHub**: use [private vulnerability reporting](https://github.com/v2matosevic/agent-coord/security/advisories/new)
   on this repository (preferred), or
 - open a regular issue *only* if the report is not exploitable.
 
