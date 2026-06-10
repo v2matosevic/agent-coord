@@ -1,6 +1,6 @@
 # agent-coord
 
-[![CI](https://github.com/v2matosevic/Version2-Agent-Coordination/actions/workflows/ci.yml/badge.svg)](https://github.com/v2matosevic/Version2-Agent-Coordination/actions/workflows/ci.yml)
+[![CI](https://github.com/v2matosevic/agent-coord/actions/workflows/ci.yml/badge.svg)](https://github.com/v2matosevic/agent-coord/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Node ≥ 22](https://img.shields.io/badge/node-%E2%89%A5%2022-brightgreen.svg)](https://nodejs.org)
 ![Platforms](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-8a8076.svg)
@@ -43,8 +43,8 @@ The agent follows the [`AGENTS.md`](./AGENTS.md) runbook — installs, verifies
 (`doctor` 9/9), and reports back. That's it.
 
 ```bash
-git clone https://github.com/v2matosevic/Version2-Agent-Coordination.git
-cd Version2-Agent-Coordination
+git clone https://github.com/v2matosevic/agent-coord.git
+cd agent-coord
 # then open this folder in your agent and paste the message above
 ```
 
@@ -77,6 +77,26 @@ node cli/doctor.mjs        # expect: 9/9 checks passed
 | **Claude Code** | Full enforcement — a `PreToolUse` hook claims the file you're about to edit or **blocks it (`exit 2`)** if a peer holds it. Bash guard reserves dev port / DB / deploy. Statusline shows the fleet **and your own identity**. MCP tools for active coordination. |
 | **Codex** | MCP awareness + model-invoked claims; enforced at commit by the global pre-commit net. |
 | **Any committer** (Codex / Cursor / Aider / manual) | The **global git pre-commit** rejects a commit that stages a file another live agent is actively editing. |
+
+### How it works
+
+```mermaid
+flowchart LR
+    subgraph agents [Agents on one machine]
+        CC["Claude Code<br/>(hooks: pre-write block)"]
+        CX["Codex / Cursor / …<br/>(MCP awareness)"]
+        GIT["Any committer<br/>(global git pre-commit net)"]
+    end
+    STORE[("~/.agent-coord<br/>SQLite (WAL)<br/>presence · leases · messages · tasks")]
+    CC <--> STORE
+    CX <--> STORE
+    GIT <--> STORE
+    STORE --> OBS["statusline · terminal watch · browser dashboard<br/>VS Code panel · macOS menu bar"]
+```
+
+No daemon — every hook, CLI, and MCP call opens the same SQLite store directly
+(WAL, `BEGIN IMMEDIATE` for atomic claims) and exits. If anything breaks, the
+guards fail **open but loud**: you lose coordination, never your work.
 
 ### The coordination model
 

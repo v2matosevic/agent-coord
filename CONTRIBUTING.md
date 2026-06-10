@@ -1,7 +1,8 @@
 # Contributing
 
 Thanks for looking at agent-coord. It's a small, sharp tool — contributions are
-welcome as long as they keep it that way.
+welcome as long as they keep it that way. By participating you agree to the
+[Code of Conduct](./CODE_OF_CONDUCT.md).
 
 ## Ground rules
 
@@ -21,8 +22,8 @@ welcome as long as they keep it that way.
 ## Getting set up
 
 ```bash
-git clone https://github.com/v2matosevic/Version2-Agent-Coordination.git
-cd Version2-Agent-Coordination
+git clone https://github.com/v2matosevic/agent-coord.git
+cd agent-coord
 npm ci          # only the MCP SDK
 npm test        # full suite, isolated store — expect all green
 ```
