@@ -162,6 +162,12 @@ read pointer), `tasks` (workspace-scoped shared task board — owner, status,
 `depends_on`, `summary` handoff, `priority`), `decisions` (workspace-scoped
 decision log, latest per topic).
 
+**Scope boundary:** the store is one SQLite file per machine, so everything
+above — including `scope:'global'` messages — reaches only agents on **this**
+device. Nothing here syncs across machines; cross-device messaging/dispatch is
+a separate transport's job (in this fleet: Athena Workspaces' `hermes msg`,
+hub-routed). Don't assume a peer on another machine saw a `post_message`.
+
 ---
 
 ## 5. Commands
