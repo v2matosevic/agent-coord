@@ -1,8 +1,16 @@
 // Workspace-scoped messaging: broadcast + directed delivery, read-once,
 // cross-workspace isolation, and no self-delivery.
-import { getDb, writeTxn } from "../lib/store.mjs";
-import { ensureAgent } from "../lib/agents.mjs";
-import { postMessage, readMessages, unreadCount } from "../lib/messages.mjs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// Isolate BEFORE importing modules that bind COORD_HOME: global broadcasts in
+// the LIVE store deliver to every workspace, so an un-isolated run inherits
+// whatever real agents posted that day (bit us 2026-06-10).
+process.env.AGENT_COORD_HOME ||= mkdtempSync(join(tmpdir(), "coord-msg-"));
+const { getDb, writeTxn } = await import("../lib/store.mjs");
+const { ensureAgent } = await import("../lib/agents.mjs");
+const { postMessage, readMessages, unreadCount } = await import("../lib/messages.mjs");
 
 const db = getDb();
 const wsA = "msg-wsA-" + process.pid;

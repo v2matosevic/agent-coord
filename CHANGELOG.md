@@ -3,6 +3,19 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — messaging is machine-local by design; quieter banners
+
+Boundary made explicit after an agent assumed otherwise: the store is one
+SQLite file per machine, so `post_message` — even `scope:'global'` — reaches
+only agents on **this** device. Cross-DEVICE messaging is a different tool's
+job (Athena Workspaces' `hermes msg`, hub-routed notes + dispatchable tasks);
+docs now say so. Desktop banners fire only for messages **directed to a
+specific agent** — a broadcast is delivered once per receiving agent, so
+bannering all of them turned one post into N alerts. And `test/messages.mjs`
+now self-isolates its store like every other test: global broadcasts in the
+live store deliver to every workspace, so an un-isolated run inherited
+whatever real agents posted that day.
+
 ## Recent — public-remote WIP guard (pre-push)
 
 New universal-chokepoint net, same philosophy as the pre-commit guard: a global
