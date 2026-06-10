@@ -12,7 +12,7 @@ hooks/CLI are zero-dependency, only the MCP server uses `@modelcontextprotocol/s
 
 ## 1. The problem it solves
 
-Marko runs many AI coding agents at once — several Claude Code terminals in one
+The operator runs many AI coding agents at once — several Claude Code terminals in one
 VS Code window on one repo, plus more across other windows/repos, plus Codex.
 Each agent process is an island with zero shared state, so they: edit the same
 file simultaneously, duplicate work, make contradictory decisions, and collide on
@@ -165,8 +165,9 @@ decision log, latest per topic).
 **Scope boundary:** the store is one SQLite file per machine, so everything
 above — including `scope:'global'` messages — reaches only agents on **this**
 device. Nothing here syncs across machines; cross-device messaging/dispatch is
-a separate transport's job (in this fleet: Athena Workspaces' `hermes msg`,
-hub-routed). Don't assume a peer on another machine saw a `post_message`.
+a separate transport's job (e.g. a hub-routed messaging rail, a shared git
+remote, or the human relaying). Don't assume a peer on another machine saw a
+`post_message`.
 
 ---
 
@@ -264,8 +265,8 @@ adopts the published id end-to-end; Codex stays standalone). `cli/doctor.mjs` = 
 - **`node:sqlite` instead of `better-sqlite3`** — Node 22.22 ships it; zero deps,
   no native build, kills the §3.6 ABI failure mode (a node upgrade silently
   disabling hooks). Same `IMMEDIATE`-transaction guarantee.
-- **Exclusive-by-default file leases** (not shared+serial-list) — fits Marko's
-  solo/handful-per-repo reality; blocking concurrent same-file edits is the
+- **Exclusive-by-default file leases** (not shared+serial-list) — fits the
+  solo-operator/handful-per-repo reality; blocking concurrent same-file edits is the
   headline value. Shared mode exists for future tuning.
 - **Global `core.hooksPath`** for the commit net (DESIGN suggested per-repo) —
   the explicit "make it global" requirement; chains to repo-local hooks, fails open.
@@ -409,7 +410,7 @@ memory the next agent reads. That is the whole mechanism; anything fancier is hy
   per-project memory notes (high threshold, update-not-duplicate); hotspot warnings
   surfaced in `claim_files`; a `query_history` MCP tool; SessionStart-throttled run.
 - CUT: a model-curated "summarize my work" auto-note writer — it pollutes the
-  hand-curated vault that models Marko; and scheduling a writer before it's proven.
+  hand-curated vault that models the operator; and scheduling a writer before it's proven.
 
 **Privacy (hard rules — the store is single-user but mixes clients):**
 - Distill reads **only** `activity_log` — **never** `agents.current_task` (verbatim

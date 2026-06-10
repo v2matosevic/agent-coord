@@ -6,8 +6,9 @@ macOS. This is the roadmap beyond that, grounded in the **honest limits** in
 [`DESIGN.md` §9](../DESIGN.md) / [`SYSTEM.md` §9](./SYSTEM.md) and what already exists
 — not a wishlist of duplicates.
 
-Each item is tagged with rough **effort** (S/M/L) and **value** for Marko's actual
-setup (solo operator, many concurrent Claude/Codex sessions, web-dev studio, macOS).
+Each item is tagged with rough **effort** (S/M/L) and **value** for the original
+setup it was built in (solo operator, many concurrent Claude/Codex sessions,
+web-dev studio, macOS + Windows).
 
 ## Recommended next 3
 
@@ -62,7 +63,7 @@ setup (solo operator, many concurrent Claude/Codex sessions, web-dev studio, mac
 
 - **Auto-detect more singletons for the stack** (M) — OrbStack/Docker containers,
   DB URLs from `.env`, dev ports from `package.json` scripts, Hostinger/Hetzner
-  deploy targets — so the resource guard covers Marko's real collision points, not
+  deploy targets — so the resource guard covers the operator's real collision points, not
   just the built-in `port:`/`db:`/`deploy:` rules.
 
 ## Robustness / ops

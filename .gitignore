@@ -5,3 +5,6 @@ node_modules/
 
 # Machine-local Claude/Hermes wiring — never tracked (each machine runs 'hermes hook install' locally if it wants auto-sync)
 .claude/
+
+# Playwright MCP scratch
+.playwright-mcp/

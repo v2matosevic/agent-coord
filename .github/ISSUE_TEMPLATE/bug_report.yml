@@ -1,0 +1,41 @@
+name: Bug report
+description: Something broke, blocked wrongly, or failed to block
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+      placeholder: "Two agents edited the same file but the guard didn't block / the guard blocked me on a file nobody holds / doctor fails check N…"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`node cli/doctor.mjs` output"
+      description: Paste the full output — it pinpoints most install issues.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS + Node version + which agent(s)
+      placeholder: "macOS 15 (arm64), Node 22.11, Claude Code + Codex"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Two Claude Code sessions in the same repo
+        2. Agent A edits src/x.ts, agent B edits the same file within a minute
+        3. …
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: "`node cli/status.mjs` output, hook stderr, relevant ~/.agent-coord state — whatever seems related."
