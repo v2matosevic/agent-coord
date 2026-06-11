@@ -16,7 +16,6 @@ const RED = "#cc2323"; // brand red
 const GRAY = "#8a8a8a";
 const DASH_URL = "http://localhost:7777"; // cli/dashboard.mjs default
 
-const short = (id) => String(id).replace(/-\d+$/, "");
 const repoName = (p) => (p ? p.replace(/\/+$/, "").split("/").pop() : "—");
 const trunc = (s, n) => ((s = String(s ?? "")), s.length > n ? s.slice(0, n - 1) + "…" : s);
 
@@ -71,7 +70,7 @@ try {
         const sym = a.tool === "codex" ? "diamond.fill" : "circle.fill";
         const det = a.editing ? `  ⚙ ${trunc(a.editing, 34)}` : a.current_task ? `  “${trunc(a.current_task, 32)}”` : "";
         const onConflict = a.editing && a.repo_path && conflictKeys.has(workspaceId(a.repo_path) + "||" + a.editing);
-        p(`${short(a.agent_id)}${det} | size=13 sfimage=${sym}${onConflict ? ` color=${RED}` : ""}`);
+        p(`${a.agent_id}${det} | size=13 sfimage=${sym}${onConflict ? ` color=${RED}` : ""}`);
       }
     }
   }
@@ -86,7 +85,7 @@ try {
   if (res.length) {
     p("---");
     p(`resources | size=11 color=${GRAY}`);
-    for (const r of res.slice(0, 8)) p(`${r.resource_id} — ${short(r.agent_id)} | size=12 sfimage=lock.fill`);
+    for (const r of res.slice(0, 8)) p(`${r.resource_id} — ${r.agent_id} | size=12 sfimage=lock.fill`);
   }
 
   const openTasks = (state.tasks || []).length;

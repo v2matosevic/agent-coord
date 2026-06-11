@@ -45,7 +45,7 @@ createTask(db, { workspaceId: ws, title: "open work item", priority: 3 });
 postMessage(db, { fromAgent: A, workspaceId: ws, toAgent: B, body: "heads up" });
 const brief = buildRoomBrief(db, { agentId: B, workspaceId: ws, repoRoot: repo });
 checks["brief: self-identity"] = !!brief && brief.includes(`you are ${B}`);
-checks["brief: shows peer + its task"] = !!brief && brief.includes(A.replace(/-\d+$/, "")) && brief.includes("auth refactor");
+checks["brief: shows peer + its task"] = !!brief && brief.includes(A) && brief.includes("auth refactor");
 checks["brief: board with ready count + priority"] = !!brief && brief.includes("1 ready") && brief.includes("p3");
 checks["brief: standing decisions"] = !!brief && brief.includes("[db]") && brief.includes("[auth]");
 checks["brief: unread mail"] = !!brief && brief.includes("✉ 1 unread");

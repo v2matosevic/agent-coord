@@ -23,7 +23,6 @@ function readInput() {
   }
 }
 const shorten = (s, n = 22) => ((s = String(s)), s.length > n ? s.slice(0, n - 1) + "…" : s);
-const short = (id) => id.replace(/-\d+$/, "");
 const repoName = (p) => (p ? p.replace(/\/+$/, "").split("/").pop() : null);
 
 try {
@@ -48,7 +47,7 @@ try {
   const detail = (a) =>
     a.editing ? ` ⚙ ${shorten(a.editing)}` : a.current_task ? ` “${shorten(a.current_task, 24)}”` : "";
   const fmt = (a, withRepo) =>
-    (withRepo && a.repo_path ? dim(repoName(a.repo_path) + ":") : "") + short(a.agent_id) + dim(detail(a));
+    (withRepo && a.repo_path ? dim(repoName(a.repo_path) + ":") : "") + a.agent_id + dim(detail(a));
   const group = (arr, wr) =>
     arr.slice(0, MAX_SHOWN).map((a) => fmt(a, wr)).join(dim(" · ")) +
     (arr.length > MAX_SHOWN ? dim(` +${arr.length - MAX_SHOWN}`) : "");
