@@ -3,7 +3,7 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
-## Recent — simple, speakable agent names
+## v1.2.0 — simple, speakable agent names
 
 Agent IDs are now a single common word: `cedar-bison-5003` → `fox`. The
 operator often addresses agents through voice transcription, and
