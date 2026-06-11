@@ -20,8 +20,6 @@ import { recordDecision, listDecisions } from "../lib/decisions.mjs";
 import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
 import { TOOL_DEFS } from "./tool-defs.mjs";
 
-const short = (id) => String(id).replace(/-\d+$/, "");
-
 // One stdio MCP server == one agent (clients spawn it per session). This is how
 // non-Claude agents (Codex, etc.) get coordination: awareness + model-invoked
 // claims. Enforcement for them is the git pre-commit net, not pre-write blocks.
@@ -93,10 +91,10 @@ function handle(name, a) {
       let warning = null;
       if (mustYield.length) {
         const p = mustYield[0];
-        warning = `⚠ Your task overlaps ${short(p.agentId)}, who started before you ("${p.task}"). You're the later starter — narrow your lane (re-announce a distinct sub-task) or post_message to hand off. Don't rebuild what they're already building.`;
+        warning = `⚠ Your task overlaps ${p.agentId}, who started before you ("${p.task}"). You're the later starter — narrow your lane (re-announce a distinct sub-task) or post_message to hand off. Don't rebuild what they're already building.`;
       } else if (overlaps.length) {
         const p = overlaps[0];
-        warning = `⚠ ${short(p.agentId)} is on overlapping work ("${p.task}") but started after you — you have priority. Consider post_message to split scope cleanly.`;
+        warning = `⚠ ${p.agentId} is on overlapping work ("${p.task}") but started after you — you have priority. Consider post_message to split scope cleanly.`;
       }
       return { ok: true, agentId, task: a.task, overlaps, warning };
     }

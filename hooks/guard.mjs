@@ -11,8 +11,6 @@ import { midTurnContext, postToolContextJson } from "../lib/coord-context.mjs";
 import { overlapHardBlock, earlierOverlappingPeers } from "../lib/overlap.mjs";
 import { notify } from "../lib/notify.mjs";
 
-const short = (id) => String(id).replace(/-\d+$/, "");
-
 // PreToolUse (default) on Write|Edit|MultiEdit|NotebookEdit: claim the file, or
 // exit 2 to block when another live agent holds it. PostToolUse (--post): just
 // refresh heartbeat + log the edit. Always fails OPEN (exit 0) but LOUD (sets
@@ -64,15 +62,15 @@ try {
     logActivity(db, { agentId, workspaceId: ws, event: "overlap-block", detail: dup.agentId });
     notify({
       title: "⛔ agent-coord — stood down",
-      message: `Your task duplicates ${short(dup.agentId)}'s (they started first). Narrow your lane or hand off.`,
+      message: `Your task duplicates ${dup.agentId}'s (they started first). Narrow your lane or hand off.`,
       key: `overlap:${dup.agentId}`,
       sound: true,
     });
     process.stderr.write(
-      `⛔ agent-coord: standing you down — your task duplicates ${short(dup.agentId)}'s, who started before you ` +
+      `⛔ agent-coord: standing you down — your task duplicates ${dup.agentId}'s, who started before you ` +
         `("${String(dup.task).slice(0, 80)}"). You've been advised and kept editing the same area.\n` +
         `   To proceed: narrow your lane with the announce_intent tool (a distinct sub-task clears this), ` +
-        `or post_message ${short(dup.agentId)} to split the work. Don't rebuild what they're already building.\n`,
+        `or post_message ${dup.agentId} to split the work. Don't rebuild what they're already building.\n`,
     );
     process.exit(2);
   }
@@ -83,7 +81,7 @@ try {
     logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });
     notify({
       title: "⛔ agent-coord — blocked",
-      message: `"${path}" is held by ${short(res.conflict.agent_id)} (${res.conflict.current_task || "working"}).`,
+      message: `"${path}" is held by ${res.conflict.agent_id} (${res.conflict.current_task || "working"}).`,
       key: `block:${path}`,
       sound: true,
     });
@@ -91,17 +89,17 @@ try {
     // here). Tell the model how to self-resolve — it auto-frees when they move
     // on; never escalate to the human or force-release a live peer.
     const mins = Math.max(1, Math.ceil((new Date(res.conflict.acquired_at).getTime() + FILE_ACTIVE_MS - Date.now()) / 60000));
-    let extra = `They're editing it now; it auto-frees in ~${mins} min once they move on. Edit another file and retry, or post_message ${short(res.conflict.agent_id)} to coordinate. Don't force-release or ask the human to unlock.`;
+    let extra = `They're editing it now; it auto-frees in ~${mins} min once they move on. Edit another file and retry, or post_message ${res.conflict.agent_id} to coordinate. Don't force-release or ask the human to unlock.`;
     try {
       const dupHolder = earlierOverlappingPeers(db, { agentId, workspaceId: ws, task: db.prepare("SELECT current_task FROM agents WHERE agent_id=?").get(agentId)?.current_task })
         .find((p) => p.agentId === res.conflict.agent_id);
       if (dupHolder)
         extra =
-          `⚠ ${short(res.conflict.agent_id)} started before you and is on overlapping work — you're likely DUPLICATING it. ` +
+          `⚠ ${res.conflict.agent_id} started before you and is on overlapping work — you're likely DUPLICATING it. ` +
           `Narrow your lane (announce_intent) or post_message to hand off — don't rebuild it.`;
     } catch {}
     process.stderr.write(
-      `⛔ agent-coord: "${path}" is held by ${short(res.conflict.agent_id)} (${res.conflict.current_task || "working"}). ${extra}\n`,
+      `⛔ agent-coord: "${path}" is held by ${res.conflict.agent_id} (${res.conflict.current_task || "working"}). ${extra}\n`,
     );
     process.exit(2); // blocks the tool; Claude feeds this stderr back to the model
   }

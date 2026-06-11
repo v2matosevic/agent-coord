@@ -34,10 +34,6 @@ function shorten(s, n = 22) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
-function shortName(id) {
-  return id.replace(/-\d+$/, "");
-}
-
 function detailOf(a) {
   if (a.editing) return ` ⚙ ${shorten(a.editing)}`;
   if (a.task) return ` “${shorten(a.task, 26)}”`;
@@ -107,10 +103,10 @@ function render() {
 
   const fmt = (a, withRepo) => {
     if (a.editing && conflicts.has(a.editing)) {
-      return accent("⚠ " + shortName(a.agentId) + detailOf(a));
+      return accent("⚠ " + a.agentId + detailOf(a));
     }
     const repoTag = withRepo && a.repoName ? dim(a.repoName + ":") : "";
-    return repoTag + shortName(a.agentId) + dim(detailOf(a));
+    return repoTag + a.agentId + dim(detailOf(a));
   };
 
   const group = (agents, withRepo) => {

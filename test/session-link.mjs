@@ -56,7 +56,7 @@ const whoamiVia = async (toolArg) => {
 const claudeId = await whoamiVia("claude-code");
 const codexId = await whoamiVia("codex");
 checks["claude server adopts hook id"] = claudeId === "adopted-otter-1234";
-checks["codex server stays standalone"] = typeof codexId === "string" && codexId !== "adopted-otter-1234" && /-\d{4}$/.test(codexId);
+checks["codex server stays standalone"] = typeof codexId === "string" && codexId !== "adopted-otter-1234" && /^[a-z]+$/.test(codexId);
 
 let ok = true;
 for (const [k, v] of Object.entries(checks)) {

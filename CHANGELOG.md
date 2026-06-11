@@ -3,6 +3,25 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — simple, speakable agent names
+
+Agent IDs are now a single common word: `cedar-bison-5003` → `fox`. The
+operator often addresses agents through voice transcription, and
+`umber-shrike-7421` survives neither a microphone nor a memory. Names come
+from a pool of 64 easy-to-say animals; since a small pool makes pure-hash
+collisions likely (and a collision silently merges two sessions' locks), a
+name is now **claimed, not hashed**: the session's first hook claims a free
+name under `~/.agent-coord/names/` (deterministic starting point + linear
+probe, create-exclusive so two sessions can't win the same name), every later
+hook resolves the same claim, and a name recycles after ~24 h of silence. If
+the names dir is unreachable the old behavior remains as the fail-open
+fallback: a deterministic hash pick, collision-possible but never blocking.
+The numeric suffix is gone for good — every display surface was already
+stripping it with a local `short()` helper, so the ID now IS the display name
+and all nine `short()` shims are deleted. One-time effect on upgrade: **every
+agent is renamed**, so a live session's pre-upgrade locks read as another
+agent's until they go cold and self-release (~minutes). Self-healing.
+
 ## v1.1.0 — open-source release readiness
 
 The repo is now a proper public open-source project, not just a public repo:

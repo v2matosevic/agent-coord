@@ -94,7 +94,7 @@ A single stdio MCP server (`agent-coord-mcp`), registered in each agent's global
 schema_version ( version INTEGER )
 
 agents
-  agent_id TEXT PK         -- human-memorable, e.g. "amber-fox-7421"
+  agent_id TEXT PK         -- human-memorable, e.g. "fox"
   tool TEXT                -- claude-code | codex | cursor | gemini | windsurf | cline | aider | copilot
   pid INTEGER  proc_start_time TEXT   -- captured ONCE at register
   repo_path TEXT  branch TEXT  worktree_path TEXT NULL  current_task TEXT NULL
@@ -153,7 +153,7 @@ Per-agent path extraction differs: Claude → `tool_input.file_path`; Codex → 
 | `PreToolUse` | `Bash` | Best-effort scan for (a) file-mutating commands (`Set-Content`, `> file`, `sed -i`, codegen) → check file lease; (b) **shared-resource** commands (`deploy`, `drizzle-kit push`, migration, dev-server port bind) → require the matching `resource_lease` or **exit 2**. |
 | `PostToolUse` | `Write\|Edit\|MultiEdit` | `log_activity(edit)`; refresh lease + heartbeat; if a file changed whose `content_hash` differs but no lease held by me → log `conflict(silent-edit)`. |
 | `Stop` / `SessionEnd` | — | `release_claim(all)` + `release_resource(all)` + mark `status=dead`. |
-| `statusLine` | — | Read the **snapshot file** the MCP server maintains (no DB open, no native module). Render compact: `◆ 3 here · amber-fox edit src/auth/** · ⚠ COORD DEGRADED`. `refreshInterval: 5000`. |
+| `statusLine` | — | Read the **snapshot file** the MCP server maintains (no DB open, no native module). Render compact: `◆ 3 here · fox edit src/auth/** · ⚠ COORD DEGRADED`. `refreshInterval: 5000`. |
 
 **Git pre-commit hook (the universal chokepoint, per repo via `core.hooksPath`):** reads the store, computes the canonical key for every staged path, and rejects the commit if any staged file is held by another live agent's exclusive lease, or if the commit touches a guarded resource (migration/lockfile) without the resource lease. Single mechanism covering Codex, Cursor, Aider, Cline, Copilot, and manual commits uniformly. Detection at commit, not edit — but real, hard enforcement for every committer.
 
@@ -168,7 +168,7 @@ Per-agent path extraction differs: Claude → `tool_input.file_path`; Codex → 
 ### (a) Same-repo conflicts (multiple agents, one tree)
 Same repo root → same `workspace_id` (branch not in key, so mid-session `git switch` doesn't orphan leases).
 1. Agent A edits `src/checkout.ts`: `PreToolUse` → `claim_files` → granted, lease + `content_hash`.
-2. Agent B edits the same file: `PreToolUse` → `check_conflicts` → sees A's live exclusive lease → **exit 2**; B's model receives "locked by amber-fox for 'vCard checkout'". B is offered the resolution tier (§4c), not a dead end.
+2. Agent B edits the same file: `PreToolUse` → `check_conflicts` → sees A's live exclusive lease → **exit 2**; B's model receives "locked by fox for 'vCard checkout'". B is offered the resolution tier (§4c), not a dead end.
 3. Automatic for Claude (doesn't depend on B's model calling `claim_files`). Non-Claude degrades per the matrix (§5), backstopped by git pre-commit.
 
 **Most same-file edits are non-overlapping line ranges that git merges cleanly.** So default is a **shared** lease + optimistic reconcile; exclusive locks reserved for genuinely serial files (`package.json`, lockfiles, migrations, schema). Avoids false-positive serialization that would tank throughput at dozens of agents.

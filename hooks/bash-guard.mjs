@@ -19,8 +19,6 @@ import { notify } from "../lib/notify.mjs";
 // committer marker on `git commit` so the pre-commit hook can tell a
 // self-commit from a cross-agent one. Fails open but loud.
 
-const short = (id) => String(id).replace(/-\d+$/, "");
-
 function readInput() {
   try {
     return JSON.parse(readFileSync(0, "utf8") || "{}");
@@ -70,9 +68,9 @@ try {
       if (!res.granted) {
         enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
         logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });
-        notify({ title: "⛔ agent-coord — blocked (shell)", message: `"${path}" is held by ${short(res.conflict.agent_id)}.`, key: `block:${path}`, sound: true });
+        notify({ title: "⛔ agent-coord — blocked (shell)", message: `"${path}" is held by ${res.conflict.agent_id}.`, key: `block:${path}`, sound: true });
         process.stderr.write(
-          `⛔ agent-coord: this command writes "${path}", held by ${short(res.conflict.agent_id)} (${res.conflict.current_task || "working"}). ` +
+          `⛔ agent-coord: this command writes "${path}", held by ${res.conflict.agent_id} (${res.conflict.current_task || "working"}). ` +
             `It auto-frees when they move on — wait, target another file, or post_message to coordinate. Don't force it.\n`,
         );
         process.exit(2);
