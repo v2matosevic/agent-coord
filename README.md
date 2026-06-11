@@ -125,6 +125,15 @@ guards fail **open but loud**: you lose coordination, never your work.
 - **Autonomous push hand-off.** Told to push a history with other agents' commits,
   an agent runs `pending_push_review` (author + live status + verdict per commit)
   instead of asking you.
+- **Decisions stay decided.** `record_decision` pins a project-level choice
+  ("httpOnly JWT cookies, no localStorage") — broadcast to live peers, shown to
+  every arriving agent, latest-per-topic. The failure it kills: two agents making
+  contradictory architectural choices in *different* files, which no file lock
+  can see.
+- **Searchable memory.** Everything above accumulates into the store, and
+  `search` (FTS5 full-text) answers "has this been discussed / decided / built
+  already?" across messages, decisions, and tasks — best match first, not just
+  chronological dumps.
 
 ---
 
@@ -140,6 +149,7 @@ node cli/worktree.mjs new           # isolate an agent: own worktree + branch + 
 node cli/insights.mjs [--since 7d]  # retro: files edited by 2+ agents + conflicts
 node cli/digest.mjs [--since 7d]    # write a durable per-project hotspot digest (~/.agent-coord/digests/)
 node cli/pending-push.mjs           # who authored the unpushed commits + push verdicts
+node cli/search.mjs "<query>"       # full-text search messages/decisions/tasks (--kinds, --limit)
 node cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 ```
 All CLIs run under `node --disable-warning=ExperimentalWarning <script>`.
@@ -150,7 +160,8 @@ All CLIs run under `node --disable-warning=ExperimentalWarning <script>`.
 `check_conflicts`, `claim_files`, `release_files`, `claim_resource`,
 `release_resource`, `log_activity`, `post_message`, `read_messages`,
 `pending_push_review`, `ask_agent`, `check_replies`, `reply`, `request_yield`,
-`query_history`, `list_tasks`, `claim_task`, `update_task`.
+`query_history`, `list_tasks`, `claim_task`, `claim_next_task`, `update_task`,
+`record_decision`, `list_decisions`, `search`.
 
 ## VS Code extension (optional)
 
@@ -201,6 +212,24 @@ claude mcp remove agent-coord --scope user
 codex mcp remove agent-coord
 # restore a ~/.claude/settings.json.bak.*  and delete ~/.agent-coord/
 ```
+
+## How it compares
+
+Most multi-agent tooling solves concurrency by **isolation**: a git worktree or
+container per agent (claude-squad, container-use, vibe-kanban, ccmanager…).
+That works — until the agents are supposed to be working on the *same* tree, or
+they share a dev port, a database, a deploy target. The few projects that do
+shared-tree coordination (mcp_agent_mail, swarm-protocol) keep their file
+leases **advisory**: the agent is *asked* to check before writing.
+
+agent-coord's stance is **enforcement at the chokepoints**: the `PreToolUse`
+hook *blocks* the write (exit 2) while a peer's lease is warm, risky shell
+commands claim machine-wide resources before they run, and the git
+pre-commit/pre-push hooks catch every committer — including agents with no
+hook support at all. Awareness (presence, messages, board, decisions, search)
+rides on top of that floor, and the locks self-heal so enforcement never needs
+a human with a key. Isolation tools and agent-coord compose, by the way: a
+worktree-per-agent setup still shares ports, DBs, and pushes.
 
 ## Honest limits
 

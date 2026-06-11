@@ -3,7 +3,35 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
-## Recent — duplicate-work guard fixed for resumed sessions; MCP instructions
+## v1.3.0 — searchable coordination memory; failure-path delivery
+
+**`search` (25th MCP tool + `cli/search.mjs`):** full-text search over the
+room's accumulated memory — peer messages, recorded decisions, and board tasks
+— so "has this been discussed / decided / built already?" is one plain-language
+query with «highlighted» snippets, best match first, instead of paging
+chronological dumps. One FTS5 virtual table (`search_index`) indexes all three
+kinds; SQLite **triggers** keep it in sync with zero changes to the write paths
+(so even older long-running processes' writes are indexed), a one-time backfill
+covers everything the store already holds, and global broadcasts stay
+searchable from every room. Queries are quoted term-by-term (AND semantics) so
+natural punctuation can't hit MATCH syntax errors. No FTS5 in the SQLite build?
+Everything degrades to a LIKE scan — same shape, no ranking, never blocks.
+activity_log is deliberately not indexed (high-volume/low-text;
+`query_history` serves it). `+ lib/search.mjs`, `cli/search.mjs`,
+`test/search.mjs`.
+
+**Failures deliver too (`PostToolUseFailure`):** mid-turn delivery + heartbeat
+now also ride tool *failures* — the agent stuck retrying a broken build is
+exactly the one that must stay visible to the fleet and hear a peer's "stop, I
+broke that". Same `guard.mjs --post`, event-aware (a failed edit isn't logged
+as an edit). Re-run `node setup.mjs` (or the installer) to register the hook.
+
+**Positioning:** README gains a "How it compares" section — the honest map of
+the field (isolation tools, advisory-lease tools) and where enforced
+shared-tree coordination sits. Research-backed: nobody else combines hook-level
+blocking + machine-wide resource locks + git chokepoints.
+
+## v1.3.0 also — duplicate-work guard fixed for resumed sessions; MCP instructions
 
 Field report from a live agent (gilt-hawk): a RESUMED session inherits the
 synthetic prompt "Continue where you left off" as its task text, Jaccard-matches

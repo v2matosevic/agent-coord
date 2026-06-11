@@ -71,8 +71,9 @@ work) but writes a `coord-degraded.flag` + stderr, surfaced by statusline/doctor
 | SessionStart | — | `hooks/session.mjs --register` | register agent + reap + publish claude.exe→id link |
 | UserPromptSubmit | — | `hooks/session.mjs --prompt` | capture the task + deliver unread peer messages |
 | PreToolUse | `Write\|Edit\|MultiEdit\|NotebookEdit` | `hooks/guard.mjs` | claim file or **exit 2**; overlap escalation block |
-| PreToolUse | `Bash` | `hooks/bash-guard.mjs` | claim port/DB/deploy or **exit 2**; stamp committer marker |
-| PostToolUse | `Write\|Edit\|MultiEdit\|NotebookEdit` | `hooks/guard.mjs --post` | heartbeat + log edit + **mid-turn deliver** messages/overlap advisory |
+| PreToolUse | `Bash\|PowerShell` | `hooks/bash-guard.mjs` | claim port/DB/deploy or **exit 2**; stamp committer marker |
+| PostToolUse | `Write\|Edit\|MultiEdit\|NotebookEdit\|Bash\|PowerShell` | `hooks/guard.mjs --post` | heartbeat + log edit + **mid-turn deliver** messages/overlap advisory |
+| PostToolUseFailure | same matcher | `hooks/guard.mjs --post` | failures heartbeat + deliver too — a stuck-retrying agent stays visible and reachable |
 | SessionEnd | — | `hooks/session.mjs --release` | release all |
 | SubagentStart | — | `hooks/session.mjs --subagent-start` | register the subagent (distinct id) |
 | SubagentStop | — | `hooks/session.mjs --subagent-stop` | release the subagent |
@@ -132,7 +133,7 @@ hooks/
   guard.mjs        PreToolUse file claim-or-block (exit 2) + notify on block; --post = heartbeat + log + mid-turn delivery (shell calls too)
   bash-guard.mjs   PreToolUse Bash|PowerShell: resource + shell-write-target claim-or-block + committer marker
 mcp/
-  server.mjs       stdio MCP server (24 tools); one process = one agent
+  server.mjs       stdio MCP server (25 tools); one process = one agent
   tool-defs.mjs    JSON-Schema tool catalog
 cli/
   statusline.mjs   Claude status line — leads with THIS terminal's own id + its subagents, then the fleet (⚠ CONTENDED / DEGRADED); also rewrites snapshot.json each tick
@@ -185,16 +186,20 @@ cli/insights.mjs [--since 7d]   # retro: same-file-by-2+-agents + conflicts
 cli/digest.mjs [--since 7d]     # durable per-project hotspot digest → ~/.agent-coord/digests/
 cli/install-macos-menubar.mjs   # SwiftBar/xbar menu-bar fleet (macOS)
 cli/pending-push.mjs            # who made the unpushed commits + push verdicts
+cli/search.mjs "<query>"        # full-text search messages/decisions/tasks (--kinds, --limit)
 cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 setup.mjs                       # (re)install everything, idempotent, any OS (setup.ps1 = Windows + VS Code panel)
 ```
 
-MCP tools (24, in Claude + Codex): whoami, announce_intent, list_active_agents,
+MCP tools (25, in Claude + Codex): whoami, announce_intent, list_active_agents,
 get_global_state, check_conflicts, claim_files (returns a `hotspot` warning on
 known multi-agent files), release_files, claim_resource, release_resource,
 log_activity, post_message, read_messages, pending_push_review, ask_agent,
 check_replies, reply, request_yield, query_history, list_tasks, claim_task,
-claim_next_task, update_task, record_decision, list_decisions.
+claim_next_task, update_task, record_decision, list_decisions, search
+(FTS5 full-text over messages/decisions/tasks — `lib/search.mjs`; one virtual
+table kept in sync by SQLite triggers, backfilled once, LIKE fallback if the
+build lacks FTS5; `cli/search.mjs` is the terminal face).
 
 ---
 

@@ -40,13 +40,16 @@ try {
     heartbeat(db, agentId);
     // Shell calls (Bash/PowerShell) ride this hook too, with no file_path —
     // they still heartbeat and deliver, so an agent deep in a test/build loop
-    // isn't deaf to peers; only the edit log needs a path.
-    if (fp) logActivity(db, { agentId, workspaceId: ws, event: "edit", detail: canonicalFilePath(fp, repoRoot) });
+    // isn't deaf to peers; only the edit log needs a path. PostToolUseFailure
+    // rides this same mode (a stuck-retrying agent must stay visible and
+    // reachable), but a failed tool didn't edit anything — don't log one.
+    const failed = input.hook_event_name === "PostToolUseFailure";
+    if (fp && !failed) logActivity(db, { agentId, workspaceId: ws, event: "edit", detail: canonicalFilePath(fp, repoRoot) });
     // Mid-turn delivery: surface peer messages, freed files we were blocked on,
     // + duplicate-work advisory between tool calls. Non-blocking.
     try {
       const ctx = midTurnContext(db, { agentId, workspaceId: ws });
-      if (ctx) process.stdout.write(postToolContextJson(ctx));
+      if (ctx) process.stdout.write(postToolContextJson(ctx, failed ? "PostToolUseFailure" : "PostToolUse"));
     } catch {}
     process.exit(0);
   }

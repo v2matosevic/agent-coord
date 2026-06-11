@@ -26,6 +26,10 @@ const WANT = [
   { event: "PreToolUse", matcher: "Write|Edit|MultiEdit|NotebookEdit", command: C("hooks/guard.mjs") },
   { event: "PreToolUse", matcher: "Bash|PowerShell", command: C("hooks/bash-guard.mjs") },
   { event: "PostToolUse", matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell", command: C("hooks/guard.mjs") + " --post" },
+  // Failures heartbeat + deliver too: an agent stuck retrying a broken build is
+  // exactly the one that must stay visible to the fleet and hear a peer's
+  // "stop, I broke that" mid-turn. guard.mjs --post is failure-agnostic.
+  { event: "PostToolUseFailure", matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell", command: C("hooks/guard.mjs") + " --post" },
   { event: "SessionEnd", matcher: null, command: C("hooks/session.mjs") + " --release" },
   { event: "SubagentStart", matcher: null, command: C("hooks/session.mjs") + " --subagent-start" },
   { event: "SubagentStop", matcher: null, command: C("hooks/session.mjs") + " --subagent-stop" },
