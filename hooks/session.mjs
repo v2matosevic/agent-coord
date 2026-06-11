@@ -68,7 +68,12 @@ try {
     const { repoRoot, branch } = ctx();
     ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
     const task = typeof input.prompt === "string" ? input.prompt.replace(/\s+/g, " ").trim().slice(0, 100) : null;
-    if (task) heartbeat(db, agentId, task);
+    // Resume boilerplate isn't a task — a relaunched session's synthetic
+    // "Continue where you left off" would otherwise become its current_task and
+    // Jaccard-match every other generic prompt (the gilt-hawk false positive).
+    const boilerplate = task && /^continue where you left off/i.test(task);
+    if (task && !boilerplate) heartbeat(db, agentId, task);
+    else heartbeat(db, agentId);
     // Same delivery as mid-turn (messages + freed files + overlap advisory) —
     // UserPromptSubmit stdout is injected into context.
     const ctxText = midTurnContext(db, { agentId, workspaceId: workspaceId(repoRoot) });

@@ -3,7 +3,7 @@
 // block clears the moment it differentiates its lane. Exercises the exact
 // helpers guard.mjs calls (midTurnContext + overlapHardBlock).
 import { getDb, writeTxn } from "../lib/store.mjs";
-import { ensureAgent, heartbeat } from "../lib/agents.mjs";
+import { ensureAgent, heartbeat, setIntent } from "../lib/agents.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { midTurnContext } from "../lib/coord-context.mjs";
 import { overlapHardBlock, shouldNotifyOverlap, clearOverlapNotice } from "../lib/overlap.mjs";
@@ -48,6 +48,15 @@ heartbeat(db, LATE, "build only the VAT report: oss reverse-charge quarterly pdf
 const afterCtx = midTurnContext(db, { agentId: LATE, workspaceId: ws }); // also resets the escalation counter
 checks["no advisory after differentiating"] = !afterCtx || !/duplicate-work/.test(afterCtx);
 checks["hard-block lifts after differentiating"] = overlapHardBlock(db, { agentId: LATE, workspaceId: ws }) === null;
+
+// 5) The gilt-hawk regression: a raw prompt must not clobber a declared intent.
+//    LATE announces a distinct lane (intent), then a generic resumed-session
+//    prompt rewrites current_task back to the overlapping text — overlap still
+//    compares the intent, so even a maxed escalation counter can't block.
+setIntent(db, LATE, "build only the VAT report: oss reverse-charge quarterly pdf generation");
+heartbeat(db, LATE, TASK); // the clobbering prompt
+for (let i = 0; i < OVERLAP_ESCALATE_AFTER; i++) shouldNotifyOverlap(LATE, 0);
+checks["prompt clobber can't defeat a declared intent"] = overlapHardBlock(db, { agentId: LATE, workspaceId: ws }) === null;
 
 clean();
 [EARLY, LATE].forEach(clearOverlapNotice);

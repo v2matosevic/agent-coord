@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { agentIdFromSession } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb } from "../lib/store.mjs";
-import { ensureAgent, heartbeat, markDead } from "../lib/agents.mjs";
+import { ensureAgent, heartbeat, setIntent, markDead } from "../lib/agents.mjs";
 import { claimFile, releaseFile, claimResource, releaseResource, releaseAllForAgent, peekConflicts } from "../lib/leases.mjs";
 import { logActivity, getFleet, getGlobalState } from "../lib/activity.mjs";
 import { postMessage, readMessages, findReplies } from "../lib/messages.mjs";
@@ -14,7 +14,7 @@ import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { pollSessionLink } from "../lib/session-link.mjs";
 import { reconcileServerIdentity } from "../lib/server-identity.mjs";
-import { findOverlappingPeers } from "../lib/overlap.mjs";
+import { findOverlappingPeers, clearOverlapNotice } from "../lib/overlap.mjs";
 import { createTask, claimTask, claimNextTask, updateTask, listTasks } from "../lib/tasks.mjs";
 import { recordDecision, listDecisions } from "../lib/decisions.mjs";
 import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
@@ -80,7 +80,13 @@ function handle(name, a) {
     case "whoami":
       return { agentId, tool, repo: repoRoot, branch, workspace: ws };
     case "announce_intent": {
-      heartbeat(db, agentId, a.task || null);
+      // The declared intent survives prompt-driven current_task rewrites (it's
+      // what overlap compares), and announcing resets the escalation counter —
+      // "a distinct sub-task clears this" must actually be true. If the new
+      // lane still overlaps, advisories resume and re-escalate on their own.
+      if (a.task) setIntent(db, agentId, a.task);
+      else heartbeat(db, agentId);
+      clearOverlapNotice(agentId);
       logActivity(db, { agentId, workspaceId: ws, event: "intent", detail: a.task });
       if (a.task) postMessage(db, { fromAgent: agentId, workspaceId: ws, body: "▶ " + a.task, scope: "workspace" });
       // Tell the announcer immediately if a peer is already on the same work, so
@@ -212,7 +218,22 @@ function handle(name, a) {
   }
 }
 
-const server = new Server({ name: "agent-coord", version: "1.0.1" }, { capabilities: { tools: {} } });
+// `instructions` is the one piece of server text that stays in EVERY session's
+// context when the client defers tool schemas (Claude Code's tool search does
+// this by default) — so it carries the whole protocol in miniature, front-loaded,
+// and must stay well under the client's 2KB truncation.
+const INSTRUCTIONS =
+  "Coordinates ALL AI coding agents on this machine — you are one agent among live peers who may be " +
+  "editing the same repo, dev port, or DB right now. Protocol: announce_intent BEFORE starting work " +
+  "(warns about duplicate work; later starter narrows its lane); list_active_agents to see who's here; " +
+  "post_message/reply to coordinate (delivered to peers mid-turn); claim_resource before dev-server/" +
+  "migration/deploy; record_decision to pin choices peers must not contradict; claim_next_task pulls " +
+  "ready work from the shared board, update_task(status:done, summary:...) hands off to dependents; " +
+  "pending_push_review BEFORE pushing commits you didn't author (instead of asking the human). " +
+  "File locks self-heal: a blocked file auto-frees minutes after its holder moves on — edit elsewhere " +
+  "and retry or post_message the holder; never ask the human to unlock, never force-release a live peer.";
+
+const server = new Server({ name: "agent-coord", version: "1.2.0" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;
