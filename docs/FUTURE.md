@@ -1,10 +1,13 @@
 # FUTURE — where agent-coord can go next
 
-Status: Tier 0–2 + the macOS expansion (menu bar, notifications, shell-write guard,
-self-learning digest/hotspots/`query_history`) are shipped and proven on Windows and
-macOS. This is the roadmap beyond that, grounded in the **honest limits** in
-[`DESIGN.md` §9](../DESIGN.md) / [`SYSTEM.md` §9](./SYSTEM.md) and what already exists
-— not a wishlist of duplicates.
+Status: Tier 0–2, the macOS expansion (menu bar, notifications, shell-write guard,
+self-learning digest/hotspots/`query_history`), the cooperation tier (freed-file
+notify, task handoff, decisions, room brief), v1.2 (claimed single-word speakable
+names) and v1.3 (FTS5 `search` over coordination memory, failure-path delivery)
+are shipped and proven on Windows and macOS. This is the roadmap beyond that,
+grounded in the **honest limits** in [`DESIGN.md` §9](../DESIGN.md) /
+[`SYSTEM.md` §9](./SYSTEM.md) and what already exists — not a wishlist of
+duplicates.
 
 Each item is tagged with rough **effort** (S/M/L) and **value** for the original
 setup it was built in (solo operator, many concurrent Claude/Codex sessions,
@@ -26,6 +29,10 @@ web-dev studio, macOS + Windows).
 
 ## Coordination depth
 
+- **Symbol-level leases** (L) — lock a function/class byte-range instead of the
+  whole file (the `wit` project proves the idea with Tree-sitter). Surveyed
+  2026-06: a real win for two agents in one big file, but Tree-sitter breaks the
+  zero-dependency rule — only viable as an **optional plugin**, never core.
 - **Per-line / hunk granularity** (L) — whole-file locks needlessly serialize two
   agents editing *different* functions in one big file. Map edits to symbol ranges
   (tree-sitter) and only block on overlapping ranges. The biggest correctness

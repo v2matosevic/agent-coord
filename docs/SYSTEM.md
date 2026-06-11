@@ -150,7 +150,7 @@ vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-i
                    falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
-test/              26 files — locks/board/messaging/overlap/identity/cooperation/shell-writes/insights/prepush-guard (+ helpers)
+test/              29 files — locks/board/messaging/overlap/identity/names/search/cooperation/shell-writes/insights/prepush-guard (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
@@ -241,7 +241,10 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-26 tests (run isolated via `AGENT_COORD_HOME`): `prepush-guard` (public-remote
+29 tests (run isolated via `AGENT_COORD_HOME`): `identity-names` (claimed
+single-word names: stability, 50-session uniqueness, pool exhaustion, stale
+recycle), `search` (FTS5: backfill, trigger sync, scoping, kind filter,
+punctuation-proof queries, delete cleanup), `prepush-guard` (public-remote
 WIP guard: URL parse / push matrix / visibility oracle / cache),
 `path-aliasing` (platform-aware),
 `concurrency`
