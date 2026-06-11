@@ -5,7 +5,7 @@ import { getDb, setDegraded, clearDegraded } from "../lib/store.mjs";
 import { ensureAgent, heartbeat } from "../lib/agents.mjs";
 import { claimFile, enqueue } from "../lib/leases.mjs";
 import { logActivity } from "../lib/activity.mjs";
-import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
+import { workspaceId, canonicalFilePath, isRepoRelative } from "../lib/path-canon.mjs";
 import { FILE_ACTIVE_MS } from "../lib/config.mjs";
 import { midTurnContext, postToolContextJson } from "../lib/coord-context.mjs";
 import { overlapHardBlock, earlierOverlappingPeers } from "../lib/overlap.mjs";
@@ -57,7 +57,9 @@ try {
   // Escalation (advisory -> block): if I'm the later-starter on overlapping work
   // and have already been advised enough times, my OWN guard stops me from
   // grabbing more of the same area. Escape hatch: announce a narrower lane.
-  const dup = overlapHardBlock(db, { agentId, workspaceId: ws });
+  // Scoped to files INSIDE the repo — a stand-down is about this workspace's
+  // work, so it must never block writes elsewhere (a memory dir, another tree).
+  const dup = isRepoRelative(path) ? overlapHardBlock(db, { agentId, workspaceId: ws }) : null;
   if (dup) {
     logActivity(db, { agentId, workspaceId: ws, event: "overlap-block", detail: dup.agentId });
     notify({

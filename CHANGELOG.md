@@ -3,6 +3,28 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Recent — duplicate-work guard fixed for resumed sessions; MCP instructions
+
+Field report from a live agent (gilt-hawk): a RESUMED session inherits the
+synthetic prompt "Continue where you left off" as its task text, Jaccard-matches
+any peer with an equally generic task, escalates to a stand-down — and the
+stand-down blocked Edit calls even OUTSIDE the repo; re-announcing a distinct
+sub-task never cleared it. Three root causes, three fixes: (1) **intents beat
+prompts** — `announce_intent` now writes an `intent` column (additive ALTER, no
+schema bump) that overlap detection prefers over `current_task`, so the next
+UserPromptSubmit can't clobber a deliberately differentiated lane; resume
+boilerplate is also no longer captured as a task at all. (2) **announce really
+clears** — `announce_intent` resets the escalation counter directly (if the new
+lane still overlaps, advisories resume and re-escalate on their own). (3)
+**stand-downs are repo-scoped** — the hard-block now applies only to files
+inside the workspace repo (`isRepoRelative`), never to a memory dir or another
+tree. + regression checks in `test/overlap-flow.mjs` / `test/path-aliasing.mjs`.
+
+Token hygiene: the MCP server now ships an `instructions` field — under
+client-side tool-schema deferral (Claude Code's tool search, on by default)
+it's the only server text that stays in every session's context, so it carries
+the whole protocol in miniature. Server version string synced to the package.
+
 ## v1.2.0 — simple, speakable agent names
 
 Agent IDs are now a single common word: `cedar-bison-5003` → `fox`. The

@@ -4,7 +4,7 @@
 // Windows has drive letters + backslashes + case-insensitivity; POSIX has none of
 // those, so feeding Windows spellings on macOS/Linux is meaningless (they parse as
 // odd relative names). Each platform tests the spellings that actually occur on it.
-import { canonicalFilePath } from "../lib/path-canon.mjs";
+import { canonicalFilePath, isRepoRelative } from "../lib/path-canon.mjs";
 
 const isWin = process.platform === "win32";
 
@@ -36,6 +36,16 @@ canon.forEach((c, i) => console.log(`  ${spellings[i].padEnd(46)} -> ${c}`));
 
 const uniq = [...new Set(canon)];
 console.log("unique keys:", JSON.stringify(uniq));
-const pass = uniq.length === 1 && uniq[0] === "src/app/page.tsx";
+
+// Inside-vs-outside: repo-scoped enforcement (duplicate-work stand-down) must
+// recognize that an out-of-repo canonical path is none of this repo's business.
+const scopeOk =
+  isRepoRelative("src/app/page.tsx") &&
+  !isRepoRelative("c:/users/someone/.claude/memory/note.md") &&
+  !isRepoRelative("/home/someone/.claude/memory/note.md") &&
+  !isRepoRelative(null);
+console.log(scopeOk ? "  isRepoRelative: in/out classified correctly" : "  isRepoRelative FAILED");
+
+const pass = uniq.length === 1 && uniq[0] === "src/app/page.tsx" && scopeOk;
 console.log(pass ? "PASS ✅ all spellings collapse to one key" : "FAIL ❌");
 process.exit(pass ? 0 : 1);
