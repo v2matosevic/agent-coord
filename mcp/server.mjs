@@ -18,6 +18,7 @@ import { findOverlappingPeers, clearOverlapNotice } from "../lib/overlap.mjs";
 import { createTask, claimTask, claimNextTask, updateTask, listTasks } from "../lib/tasks.mjs";
 import { recordDecision, listDecisions } from "../lib/decisions.mjs";
 import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
+import { searchRecords } from "../lib/search.mjs";
 import { TOOL_DEFS } from "./tool-defs.mjs";
 
 // One stdio MCP server == one agent (clients spawn it per session). This is how
@@ -213,6 +214,8 @@ function handle(name, a) {
     }
     case "list_decisions":
       return { decisions: listDecisions(db, { workspaceId: ws }) };
+    case "search":
+      return { results: searchRecords(db, { workspaceId: ws, query: a.query, kinds: a.kinds, limit: a.limit }) };
     default:
       throw new Error(`unknown tool: ${name}`);
   }
@@ -229,11 +232,12 @@ const INSTRUCTIONS =
   "post_message/reply to coordinate (delivered to peers mid-turn); claim_resource before dev-server/" +
   "migration/deploy; record_decision to pin choices peers must not contradict; claim_next_task pulls " +
   "ready work from the shared board, update_task(status:done, summary:...) hands off to dependents; " +
-  "pending_push_review BEFORE pushing commits you didn't author (instead of asking the human). " +
+  "pending_push_review BEFORE pushing commits you didn't author (instead of asking the human); " +
+  "search to full-text query past messages/decisions/tasks ('has this been discussed or built?'). " +
   "File locks self-heal: a blocked file auto-frees minutes after its holder moves on — edit elsewhere " +
   "and retry or post_message the holder; never ask the human to unlock, never force-release a live peer.";
 
-const server = new Server({ name: "agent-coord", version: "1.2.0" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+const server = new Server({ name: "agent-coord", version: "1.3.0" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;

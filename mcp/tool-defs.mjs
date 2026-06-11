@@ -154,4 +154,18 @@ export const TOOL_DEFS = [
     description: "The standing decisions for this repo (latest per topic). Consult before making architectural or convention choices so you don't contradict a peer's recorded decision.",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "search",
+    description:
+      "Full-text search this repo's coordination memory: peer messages, recorded decisions, and board tasks. Ask in plain words ('auth cookie decision', 'checkout bug', 'who handled the migration') — best matches first with «highlighted» snippets. Use it to answer 'has this been discussed/decided/built already?' before starting; chronological dumps (list_decisions, list_tasks) only show the latest.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        kinds: { type: "array", items: { type: "string", enum: ["message", "decision", "task"] } },
+        limit: { type: "number" },
+      },
+      required: ["query"],
+    },
+  },
 ];

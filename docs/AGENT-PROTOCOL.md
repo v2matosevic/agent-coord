@@ -119,6 +119,17 @@ neither catches two agents making **contradictory choices in different files**
 - Disagree with a recorded decision? Don't silently contradict it — `post_message`
   the author (re-recording the same topic supersedes it, so converge first).
 
+## Search the room's memory before starting
+
+`list_decisions` and `list_tasks` only show the latest state; the `search` tool
+(FTS5 full-text over peer messages, decisions, and tasks) answers "has this
+been discussed / decided / built already?" in one call — plain-language query,
+best matches first with «highlighted» snippets:
+
+- Picking up vague or resumed work → `search("checkout webhook")` before
+  building from scratch; a peer's done-summary or warning may already cover it.
+- Optional `kinds: ["message"|"decision"|"task"]` narrows; default searches all.
+
 ## Before pushing commits you didn't make
 
 If you're told to push and the history has commits from OTHER agents, don't
