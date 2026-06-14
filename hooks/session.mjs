@@ -10,7 +10,7 @@ import { buildRoomBrief } from "../lib/room-brief.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { findClaudePid } from "../lib/proc-ancestry.mjs";
-import { writeSessionLink, cachedClaudePid } from "../lib/session-link.mjs";
+import { writeSessionLink, cachedClaudePid, parentBaseFromProc } from "../lib/session-link.mjs";
 
 // Lifecycle hook. Modes:
 //   --register        SessionStart      -> register parent agent
@@ -38,7 +38,11 @@ function readInput() {
 }
 
 const input = readInput();
-const agentId = resolveAgentId(input); // parent for session events; distinct id for subagent events
+// Subagent events: pin the base to the parent session's claimed name (via the
+// claude.exe session-link) so a subagent shares its parent's identity even when
+// Claude hands it a different session_id. Parent events resolve normally.
+const parentBase = input?.agent_id ? parentBaseFromProc(process.ppid) : null;
+const agentId = resolveAgentId(input, { parentBase }); // parent for session events; distinct id for subagent events
 
 try {
   const db = getDb();

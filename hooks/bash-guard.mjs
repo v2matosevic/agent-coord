@@ -9,6 +9,7 @@ import { workspaceId } from "../lib/path-canon.mjs";
 import { detectResources } from "../lib/resource-rules.mjs";
 import { detectWriteTargets } from "../lib/bash-targets.mjs";
 import { writeCommitterMarker } from "../lib/committer.mjs";
+import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
 
 // PreToolUse on Bash/PowerShell: claim machine-wide singletons (dev port / dev
@@ -28,7 +29,9 @@ function readInput() {
 }
 
 const input = readInput();
-const agentId = resolveAgentId(input);
+// Subagent shell edits: inherit the parent session's base name (see session-link).
+const parentBase = input?.agent_id ? parentBaseFromProc(process.ppid) : null;
+const agentId = resolveAgentId(input, { parentBase });
 const cwd = input.cwd || process.cwd();
 const command = input.tool_input?.command || "";
 

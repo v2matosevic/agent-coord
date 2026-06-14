@@ -3,6 +3,36 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.3.1 — fan-out identity unification (no more ghost-twin subagents)
+
+**The bug:** an orchestrator that fans out many subagents at once could split
+into TWO coordination identities. A subagent's hook payload does not reliably
+carry the parent's `session_id`, so `agentIdFromSession` claimed a *separate*
+codename for the whole fan-out — parent `horse`, subagents `goat/…` — and the
+one session looked like two competing ones. The duplicate-work guard then stood
+subagents down against their own siblings (`overlapHardBlock` -> `exit 2`),
+leaving fan-out work half-done.
+
+**The fix, two parts:**
+- **Pin the subagent base to the parent.** New `parentBaseFromProc()`
+  (`session-link.mjs`) resolves the parent's claimed name the same way the MCP
+  server avoids its ghost twin: walk up to the `claude.exe` that parents the
+  hook and read the link `SessionStart` published. `resolveAgentId(input,
+  {parentBase})` uses it, so a subagent is always `<parent>/type-tag` even when
+  its `session_id` differs. Falls back to the `session_id` hash when no link is
+  resolvable (no regression for Codex / no-hooks). Wired into all three hooks
+  (`session`, `guard`, `bash-guard`).
+- **Never flag your own family.** `findOverlappingPeers` now skips agents that
+  share my base (`baseAgentId`): a parent and its subagents are one fleet
+  running the umbrella task, which is collaboration, not duplicate work.
+  Cross-session peers (different base) still flag normally.
+
+Sibling-vs-sibling *file* leasing is unchanged (two subagents editing the same
+file still serialize, by design). `+ test/subagent-fanout.mjs`; 30/30 pass.
+Known remaining nuance: the stdio MCP server still attributes every subagent's
+*tool* call to the one server identity (it can't see which subagent called) —
+separate from this hook-path fix.
+
 ## v1.3.0 — searchable coordination memory; failure-path delivery
 
 **`search` (25th MCP tool + `cli/search.mjs`):** full-text search over the

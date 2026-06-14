@@ -9,6 +9,7 @@ import { workspaceId, canonicalFilePath, isRepoRelative } from "../lib/path-cano
 import { FILE_ACTIVE_MS } from "../lib/config.mjs";
 import { midTurnContext, postToolContextJson } from "../lib/coord-context.mjs";
 import { overlapHardBlock, earlierOverlappingPeers } from "../lib/overlap.mjs";
+import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
 
 // PreToolUse (default) on Write|Edit|MultiEdit|NotebookEdit: claim the file, or
@@ -26,7 +27,11 @@ function readInput() {
 }
 
 const input = readInput();
-const agentId = resolveAgentId(input);
+// Subagent edits: inherit the parent session's base name (see session-link),
+// so a subagent's file claims and overlap checks belong to its parent's family
+// instead of a separate phantom session.
+const parentBase = input?.agent_id ? parentBaseFromProc(process.ppid) : null;
+const agentId = resolveAgentId(input, { parentBase });
 const cwd = input.cwd || process.cwd();
 const fp = input.tool_input?.file_path || input.tool_input?.notebook_path || null;
 
