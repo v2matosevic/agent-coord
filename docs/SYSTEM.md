@@ -50,8 +50,9 @@ every repo on the machine.
 - **Room** = `workspace_id`, keyed on the **repo root alone** (branch-independent,
   so `git switch` never orphans leases). The unit of *file* conflict.
 - **Global** = the whole fleet across every repo/window. The unit of *awareness*.
-- **Resource** = machine-wide singletons (`port:3000`, `db:dev`, `deploy:primary`),
-  orthogonal to rooms — two agents in different repos still contend.
+- **Resource** = a shared singleton, scope encoded in the key. A real OS singleton
+  (`port:3000`) is machine-wide so two repos contend; a per-project one is keyed to
+  the workspace (`deploy:<ws>`) so unrelated repos don't (see resource-rules.mjs).
 
 **Atomicity:** every store mutation runs in a `BEGIN IMMEDIATE` transaction with
 retry-on-busy, so a claim's check-and-insert is atomic across processes (proven:

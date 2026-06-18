@@ -3,6 +3,48 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.3.2 — field-report fixes: identity anchor, sender liveness, deploy scope
+
+Three problems from a live Athena session (`docs/OBSERVED-BUGS-2026-06-18.md`):
+
+- **Identity split (HIGH, correctness).** `whoami` reported one name while the
+  hooks recorded this session's file leases and commits under another — the
+  session couldn't trust its own identity and nearly coordinated with itself.
+  Root cause: the stdio MCP server read the `claude.exe → id` session-link under
+  its **raw `process.ppid`**, but the hooks key that link on the `claude.exe`
+  they walk *up* to (`findClaudePid`). With any wrapper between `claude.exe` and
+  the server (an `npx`/`.cmd` shim, a shell), the keys disagreed, so the server
+  missed the link and minted a random "ghost twin" — permanently, since the
+  reconcile path read the same wrong pid. **Fix:** the server now resolves the
+  same anchor the hooks do and reads the link under **both** the walked-up
+  `claude.exe` pid and the raw ppid (`readSessionLinkAny`/`pollSessionLinkAny`,
+  preferring the claude anchor). `pending_push_review` shared the bug and the
+  fix (own-commit recognition now also matches the whole session *family* by
+  base). Defense-in-depth: `whoami` now returns a loud `warning` when a
+  claude-code server never linked to its hooks (the ghost-twin signature),
+  instead of silently reporting a name nothing else agrees with.
+
+- **Phantom peers (MEDIUM).** `read_messages` returned a multi-hour backlog with
+  no liveness, so a since-exited author read as a live teammate (one plan handed
+  a prod deploy to an agent that was already gone). **Fix:** every message now
+  carries `from_live`; the mid-turn channel tags exited senders inline; an agent
+  counts as present if its exact id *or* its parent session (same base) is live.
+  `read_messages` adds a `note` naming any senders who've exited.
+
+- **Deploy lock too broad (MEDIUM).** (A) `deploy:primary` was a single global
+  key, so one repo's deploy serialized an unrelated repo's work — it's now keyed
+  to the **workspace** (`deploy:<ws>`); a real OS singleton (a TCP port) stays
+  machine-wide. A genuinely shared host can still be claimed explicitly via
+  `claim_resource`. (B) the deploy heuristic matched the bare word "deploy"
+  anywhere, so a read-only `gh run watch <id>` / `gh run list --workflow
+  deploy.yml` referencing a deploy workflow was blocked as a deploy mutation —
+  it now matches deploy as an **action** (a package script, a deploy-CLI
+  subcommand, or a script executed in command position), never as an argument.
+
+`+` expanded `test/{resource-keyword,bash-guard-block,server-identity,
+session-link,messages}.mjs`; 30/30 pass. No schema change; no re-install needed
+(the MCP server picks up the fix on its next spawn).
+
 ## v1.3.1 — fan-out identity unification (no more ghost-twin subagents)
 
 **The bug:** an orchestrator that fans out many subagents at once could split

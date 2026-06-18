@@ -184,10 +184,19 @@ Every agent opens the same global store. `list_active_agents()` unscoped, `coord
 5. **Human escalation** — `coord status` shows the queue/conflicts; `coord release --force <key>` breaks a stuck lease.
 
 ### (d) Cross-repo shared resources (ports, dev DB, deploy/DNS/migrations)
-The room model can't see these — they're machine-wide singletons. The `resource_leases` namespace handles them:
-- **Ports** allocated from the store (`resource:port:3000`), not a positional formula.
-- **Dev DB** — `resource:db:dev-mysql`; `drizzle-kit push` and migrations require the lease; a second concurrent migration is hard-blocked machine-wide.
-- **Deploy / DNS** — `resource:deploy:prod-vps`, `resource:dns:<zone>`. A second simultaneous deploy is blocked across repos. (These also remain user-confirm hard-stops; the lease prevents agent-vs-agent collision, the confirm prevents unwanted mutation.)
+The room model can't see these — they ride the `resource_leases` namespace. Scope
+lives in the **key**: a real OS singleton is machine-wide; a per-project target is
+workspace-keyed (revised in v1.3.2 — see below).
+- **Ports** allocated from the store (`resource:port:3000`), not a positional formula. Machine-wide: two repos on one port collide at the OS.
+- **Dev DB** — `resource:db:dev`; `drizzle-kit push` and migrations require the lease; a second concurrent migration is hard-blocked.
+- **Deploy / DNS** — `resource:deploy:prod-vps`, `resource:dns:<zone>`. (These also remain user-confirm hard-stops; the lease prevents agent-vs-agent collision, the confirm prevents unwanted mutation.)
+
+> **Revised v1.3.2 (BUG 3A, `docs/OBSERVED-BUGS-2026-06-18.md`):** deploy was
+> originally machine-wide ("blocked across repos"), but in practice each repo
+> deploys to its OWN target, so one project's deploy was needlessly serializing an
+> unrelated project's work. The auto-detected deploy lock is now keyed to the
+> **workspace** (`deploy:<ws>`); a genuinely shared prod host can still be claimed
+> with an explicit machine-wide id via `claim_resource`. Ports stay machine-wide.
 
 ---
 

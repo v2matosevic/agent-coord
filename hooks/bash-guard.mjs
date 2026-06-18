@@ -47,7 +47,9 @@ try {
   // A git commit is never itself a port/DB/deploy use — skip resource detection so
   // a message mentioning "deploy"/"migrate" (incl. -m and heredoc/-F forms) can't trip it.
   if (!isCommit) {
-    for (const r of detectResources(command)) {
+    // Pass the workspace so a per-project resource (deploy) is keyed to THIS repo —
+    // a deploy in another repo must not block a command here (BUG 3A).
+    for (const r of detectResources(command, { workspaceId: ws })) {
       const res = claimResource(db, { agentId, resourceId: r.resourceId, reason: r.label });
       if (!res.granted) {
         logActivity(db, { agentId, workspaceId: ws, event: "resource-conflict", detail: r.resourceId });

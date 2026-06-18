@@ -8,11 +8,12 @@ import { getDb } from "../lib/store.mjs";
 import { ensureAgent, heartbeat, setIntent, markDead } from "../lib/agents.mjs";
 import { claimFile, releaseFile, claimResource, releaseResource, releaseAllForAgent, peekConflicts } from "../lib/leases.mjs";
 import { logActivity, getFleet, getGlobalState } from "../lib/activity.mjs";
-import { postMessage, readMessages, findReplies } from "../lib/messages.mjs";
+import { postMessage, readMessages, findReplies, annotateSenders } from "../lib/messages.mjs";
 import { analyzePendingPush } from "../lib/pending-push.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
-import { pollSessionLink } from "../lib/session-link.mjs";
+import { pollSessionLinkAny } from "../lib/session-link.mjs";
+import { findClaudePid } from "../lib/proc-ancestry.mjs";
 import { reconcileServerIdentity } from "../lib/server-identity.mjs";
 import { findOverlappingPeers, clearOverlapNotice } from "../lib/overlap.mjs";
 import { createTask, claimTask, claimNextTask, updateTask, listTasks } from "../lib/tasks.mjs";
@@ -37,14 +38,31 @@ const ws = workspaceId(repoRoot);
 const db = getDb();
 
 // Adopt this Claude session's hook identity if the SessionStart hook published a
-// link for our parent claude.exe — so the session is ONE agent, not a hook-self
-// plus a random MCP twin (which split locks from messages and broke own-commit
+// link for our claude.exe — so the session is ONE agent, not a hook-self plus a
+// random MCP twin (which split locks from messages and broke own-commit
 // recognition in pending_push_review). Standalone fallback keeps Codex/no-hooks
 // working exactly as before.
+//
+// The hook keys the link on the persistent claude.exe it walks UP to (its own
+// parent is a transient wrapper). Our parent can ALSO be a wrapper — an npx/.cmd
+// shim or a shell — so the raw process.ppid is not reliably claude.exe. We resolve
+// the same anchor the hook does (findClaudePid) and read the link under BOTH it
+// and the raw ppid, preferring the walked-up claude pid. BUG 1 (OBSERVED-BUGS-
+// 2026-06-18): keying on the raw ppid alone made the server miss the link behind a
+// wrapper and mint a random ghost-twin id, so whoami reported one name while the
+// hooks recorded this session's leases/commits under another.
+const LINK_POLL_MS = Number(process.env.AGENT_COORD_LINK_POLL_MS) || 4000;
+const anchorPids = [process.ppid];
+if (tool === "claude-code") {
+  try {
+    const cp = findClaudePid(process.ppid);
+    if (cp && cp !== process.ppid) anchorPids.unshift(cp); // prefer the claude.exe anchor
+  } catch {}
+}
 let agentId = null;
 if (tool === "claude-code") {
   try {
-    agentId = await pollSessionLink(process.ppid);
+    agentId = await pollSessionLinkAny(anchorPids, LINK_POLL_MS);
   } catch {}
 }
 let adopted = !!agentId;
@@ -78,8 +96,21 @@ const canon = (p) => canonicalFilePath(p, repoRoot);
 
 function handle(name, a) {
   switch (name) {
-    case "whoami":
-      return { agentId, tool, repo: repoRoot, branch, workspace: ws };
+    case "whoami": {
+      const me = { agentId, tool, repo: repoRoot, branch, workspace: ws };
+      // Self-check (BUG 1 defense-in-depth): a claude-code server that never adopted
+      // a hook link is the exact signature of the ghost-twin split — the hooks are
+      // recording this session's file leases and commits under a DIFFERENT id than
+      // the one reported here. Surface it loudly instead of silently handing back a
+      // name nothing else agrees with.
+      if (tool === "claude-code" && !adopted) {
+        me.warning =
+          "identity not linked to this session's hooks — your file locks and commits may be recorded under a " +
+          "different agent name than this. Check get_global_state for a same-repo twin holding 'your' files, and " +
+          "run cli/doctor.mjs. If you just started, retry in a moment (the link may still be landing).";
+      }
+      return me;
+    }
     case "announce_intent": {
       // The declared intent survives prompt-driven current_task rewrites (it's
       // what overlap compares), and announcing resets the escalation counter —
@@ -110,10 +141,24 @@ function handle(name, a) {
     case "post_message":
       postMessage(db, { fromAgent: agentId, workspaceId: ws, body: a.body, toAgent: a.to || null, scope: a.scope || "workspace" });
       return { ok: true };
-    case "read_messages":
-      return { messages: readMessages(db, { agentId, workspaceId: ws }) };
+    case "read_messages": {
+      // Annotate each message with whether its sender is still live (BUG 2): the
+      // backlog can span hours and prior sessions, so a sender is frequently an
+      // agent that has since exited. Flag those so "wrote a message" isn't read as
+      // "here now and able to take a hand-off."
+      const messages = annotateSenders(db, readMessages(db, { agentId, workspaceId: ws }));
+      const gone = [...new Set(messages.filter((m) => !m.from_live).map((m) => m.from_agent))];
+      const out = { messages };
+      if (gone.length)
+        out.note =
+          `Senders no longer active: ${gone.join(", ")}. They've exited — don't plan hand-offs to them or treat ` +
+          `their messages as live presence; check list_active_agents for who can actually act.`;
+      return out;
+    }
     case "pending_push_review":
-      return analyzePendingPush(db, repoRoot || cwd, agentId);
+      // Pass the resolved anchor pids so own-commit recognition reads the hook id
+      // from the session-link under the claude.exe anchor, not the raw ppid (BUG 1).
+      return analyzePendingPush(db, repoRoot || cwd, agentId, { ppids: anchorPids });
     case "ask_agent": {
       const askId = randomUUID().slice(0, 8);
       postMessage(db, { fromAgent: agentId, workspaceId: ws, body: `❓[ask:${askId}] ${a.question}`, toAgent: a.to, scope: "workspace" });
@@ -237,7 +282,7 @@ const INSTRUCTIONS =
   "File locks self-heal: a blocked file auto-frees minutes after its holder moves on — edit elsewhere " +
   "and retry or post_message the holder; never ask the human to unlock, never force-release a live peer.";
 
-const server = new Server({ name: "agent-coord", version: "1.3.1" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+const server = new Server({ name: "agent-coord", version: "1.3.2" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;
@@ -246,7 +291,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // so nothing is ever claimed under the throwaway id. Gated to claude-code like the
   // startup adoption: only Claude publishes a hook link, so Codex never adopts one.
   if (!adopted && tool === "claude-code") {
-    const r = reconcileServerIdentity(db, { agentId, ppid: process.ppid, tool, repoPath: repoRoot, branch });
+    const r = reconcileServerIdentity(db, { agentId, ppids: anchorPids, tool, repoPath: repoRoot, branch });
     if (r.adopted) {
       agentId = r.agentId;
       adopted = true;

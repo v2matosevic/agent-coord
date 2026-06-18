@@ -101,8 +101,10 @@ guards fail **open but loud**: you lose coordination, never your work.
 ### The coordination model
 
 - **Rooms & resources.** A *room* = a repo (branch-independent), the unit of file
-  conflict. *Resources* = machine-wide singletons (`port:3000`, `db:dev`,
-  `deploy:primary`) — two agents in different repos still contend for them.
+  conflict. *Resources* = shared singletons. A real OS singleton like a TCP
+  `port:3000` is **machine-wide** (two repos on one port collide regardless of
+  project); a per-project one like a deploy is keyed to the **workspace**
+  (`deploy:<ws>`), so an unrelated repo's deploy can't block yours.
 - **Self-healing locks (warm/cold).** A file lock only blocks while it's *warm* —
   the holder edited that file in the last few minutes. Once they move on it goes
   *cold* and a waiting agent takes it **automatically** — no force-release, no

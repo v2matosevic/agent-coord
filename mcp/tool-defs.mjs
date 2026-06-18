@@ -27,7 +27,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "read_messages",
-    description: "Read messages other agents left for you in this workspace (plus global broadcasts). Marks them read. Call when you start a task and periodically during long work.",
+    description: "Read messages other agents left for you in this workspace (plus global broadcasts). Marks them read. Each message carries `from_live` — false means that sender has since EXITED, so don't treat its message as live presence or plan a hand-off to it. Call when you start a task and periodically during long work.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -56,7 +56,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "claim_resource",
-    description: "Reserve a machine-wide singleton before using it (e.g. 'port:3000', 'db:dev', 'deploy:primary').",
+    description: "Reserve a shared singleton before using it. Use a machine-wide id for a real OS singleton (e.g. 'port:3000') so every repo contends; the shell guard auto-claims deploys/migrations per-repo, but pass a stable shared id here (e.g. 'deploy:prod-host') when several projects genuinely deploy to ONE host and must serialize.",
     inputSchema: { type: "object", properties: { resource_id: { type: "string" }, reason: { type: "string" } }, required: ["resource_id"] },
   },
   {

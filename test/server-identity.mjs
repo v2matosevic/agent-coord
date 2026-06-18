@@ -40,6 +40,30 @@ checks["adopted id is a registered agent"] = !!agentRow(HOOK);
 r = reconcileServerIdentity(db, { agentId: HOOK, ppid: PPID, ...ctx });
 checks["already correct → adopted, no migration"] = r.agentId === HOOK && r.adopted === true && !r.migratedFrom;
 
+// 4) Multi-candidate anchors (BUG 1): the server can't be sure whether the hook
+//    keyed the link under the walked-up claude.exe pid or the raw ppid, so it
+//    offers BOTH (claude pid first). Adoption must find the link under whichever
+//    candidate carries it — proving the fix for a server behind a wrapper, whose
+//    raw ppid is not claude.exe.
+const CLAUDE_PID = PPID + 1; // the walked-up anchor (1st candidate)
+const RAW_PPID = PPID + 2; // the server's literal parent (2nd candidate)
+const HOOK2 = "srv-hook2-" + process.pid;
+const STANDALONE2 = "srv-standalone2-" + process.pid;
+ensureAgent(db, { agentId: STANDALONE2, ...ctx });
+// Link lives ONLY under the claude anchor, NOT the raw ppid — the wrapper case.
+writeSessionLink(CLAUDE_PID, HOOK2);
+r = reconcileServerIdentity(db, { agentId: STANDALONE2, ppids: [CLAUDE_PID, RAW_PPID], ...ctx });
+checks["ppids adopts the link under the claude anchor (not the raw ppid)"] = r.agentId === HOOK2 && r.adopted === true;
+
+// Fallback: link only under the raw ppid (server spawned directly by claude.exe)
+// — still adopted via the second candidate.
+const HOOK3 = "srv-hook3-" + process.pid;
+const STANDALONE3 = "srv-standalone3-" + process.pid;
+ensureAgent(db, { agentId: STANDALONE3, ...ctx });
+writeSessionLink(RAW_PPID + 10, HOOK3);
+r = reconcileServerIdentity(db, { agentId: STANDALONE3, ppids: [RAW_PPID + 9 /* no link */, RAW_PPID + 10], ...ctx });
+checks["ppids falls back to the raw ppid candidate"] = r.agentId === HOOK3 && r.adopted === true;
+
 let ok = true;
 for (const [k, v] of Object.entries(checks)) {
   if (!v) ok = false;
