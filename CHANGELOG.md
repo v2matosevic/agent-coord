@@ -23,6 +23,12 @@ Three problems from a live Athena session (`docs/OBSERVED-BUGS-2026-06-18.md`):
   base). Defense-in-depth: `whoami` now returns a loud `warning` when a
   claude-code server never linked to its hooks (the ghost-twin signature),
   instead of silently reporting a name nothing else agrees with.
+  **So it can't recur:** the anchor logic is centralized in one resolver,
+  `sessionAnchorPids()` (the documented identity invariant — claude.exe first,
+  raw ppid only as fallback, never the raw ppid alone), and every non-hook
+  identity reader routes through it — the MCP server, `pending_push_review`, AND
+  the `cli/pending-push.mjs` CLI (which had the same blind spot: its raw ppid is
+  the shell that launched it, so it couldn't recognize its own session's commits).
 
 - **Phantom peers (MEDIUM).** `read_messages` returned a multi-hour backlog with
   no liveness, so a since-exited author read as a live teammate (one plan handed
@@ -42,8 +48,12 @@ Three problems from a live Athena session (`docs/OBSERVED-BUGS-2026-06-18.md`):
   subcommand, or a script executed in command position), never as an argument.
 
 `+` expanded `test/{resource-keyword,bash-guard-block,server-identity,
-session-link,messages}.mjs`; 30/30 pass. No schema change; no re-install needed
-(the MCP server picks up the fix on its next spawn).
+session-link,messages}.mjs` (anchor resolution, multi-candidate adoption, the
+unlinked-warns self-check, sender liveness, deploy observer/scope); 30/30 pass.
+Test harness hardened so a Windows temp-cleanup race (`rmSync` vs a just-exited
+SQLite handle) can't mask a green suite. The identity invariant is documented in
+`docs/SYSTEM.md` §8 and at `sessionAnchorPids`. No schema change; no re-install
+needed (the MCP server picks up the fix on its next spawn).
 
 ## v1.3.1 — fan-out identity unification (no more ghost-twin subagents)
 

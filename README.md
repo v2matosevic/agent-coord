@@ -226,7 +226,8 @@ leases **advisory**: the agent is *asked* to check before writing.
 
 agent-coord's stance is **enforcement at the chokepoints**: the `PreToolUse`
 hook *blocks* the write (exit 2) while a peer's lease is warm, risky shell
-commands claim machine-wide resources before they run, and the git
+commands claim shared resources (a machine-wide port, a per-repo deploy) before
+they run, and the git
 pre-commit/pre-push hooks catch every committer — including agents with no
 hook support at all. Awareness (presence, messages, board, decisions, search)
 rides on top of that floor, and the locks self-heal so enforcement never needs

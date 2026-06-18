@@ -12,8 +12,7 @@ import { postMessage, readMessages, findReplies, annotateSenders } from "../lib/
 import { analyzePendingPush } from "../lib/pending-push.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
-import { pollSessionLinkAny } from "../lib/session-link.mjs";
-import { findClaudePid } from "../lib/proc-ancestry.mjs";
+import { pollSessionLinkAny, sessionAnchorPids } from "../lib/session-link.mjs";
 import { reconcileServerIdentity } from "../lib/server-identity.mjs";
 import { findOverlappingPeers, clearOverlapNotice } from "../lib/overlap.mjs";
 import { createTask, claimTask, claimNextTask, updateTask, listTasks } from "../lib/tasks.mjs";
@@ -43,22 +42,13 @@ const db = getDb();
 // recognition in pending_push_review). Standalone fallback keeps Codex/no-hooks
 // working exactly as before.
 //
-// The hook keys the link on the persistent claude.exe it walks UP to (its own
-// parent is a transient wrapper). Our parent can ALSO be a wrapper — an npx/.cmd
-// shim or a shell — so the raw process.ppid is not reliably claude.exe. We resolve
-// the same anchor the hook does (findClaudePid) and read the link under BOTH it
-// and the raw ppid, preferring the walked-up claude pid. BUG 1 (OBSERVED-BUGS-
-// 2026-06-18): keying on the raw ppid alone made the server miss the link behind a
-// wrapper and mint a random ghost-twin id, so whoami reported one name while the
-// hooks recorded this session's leases/commits under another.
+// Resolve the link under the same claude.exe anchor the hook keyed it on, not our
+// raw ppid (which is only claude.exe when it parents us directly — a wrapper in
+// between breaks it). sessionAnchorPids() is the single canonical resolver and
+// carries the full rationale + the identity invariant (BUG 1, OBSERVED-BUGS-
+// 2026-06-18). Gated to claude-code so a Codex server skips the process-tree walk.
 const LINK_POLL_MS = Number(process.env.AGENT_COORD_LINK_POLL_MS) || 4000;
-const anchorPids = [process.ppid];
-if (tool === "claude-code") {
-  try {
-    const cp = findClaudePid(process.ppid);
-    if (cp && cp !== process.ppid) anchorPids.unshift(cp); // prefer the claude.exe anchor
-  } catch {}
-}
+const anchorPids = tool === "claude-code" ? sessionAnchorPids(process.ppid) : [process.ppid];
 let agentId = null;
 if (tool === "claude-code") {
   try {

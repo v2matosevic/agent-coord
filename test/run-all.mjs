@@ -27,7 +27,14 @@ for (const f of tests) {
     timeout: 120_000,
     env: { ...process.env, AGENT_COORD_HOME: home, AGENT_COORD_NOTIFY: "0" },
   });
-  rmSync(home, { recursive: true, force: true });
+  // The test's pass/fail is already in `r.status`; cleanup is best-effort. On
+  // Windows a just-exited child can hold the SQLite file a beat longer, so a bare
+  // rmSync(force) can still throw EBUSY and crash the whole run mid-loop — swallow
+  // it (the temp dir is disposable and the OS reaps it) so a flaky unlink never
+  // masquerades as a red suite.
+  try {
+    rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch {}
   const ms = Date.now() - t0;
   if (r.status === 0) {
     passed++;

@@ -111,7 +111,7 @@ lib/
   store.mjs        node:sqlite open/init, WAL+busy_timeout, writeTxn(IMMEDIATE)+retry, degraded flag
   identity.mjs     agentIdFromSession() + resolveAgentId() (subagent-aware) + COORD_HOME (env-overridable)
   proc-ancestry.mjs findClaudePid() — walk the process tree to the shared claude.exe (cross-platform)
-  session-link.mjs claude.exe→agentId handshake so the MCP server adopts the hook identity (no ghost twin)
+  session-link.mjs claude.exe→agentId handshake so the MCP server adopts the hook identity (no ghost twin); sessionAnchorPids() is the canonical "which pids to resolve identity under" helper (the identity invariant — never the raw ppid)
   path-canon.mjs   canonicalRepoRoot/workspaceId (room key) + canonicalFilePath (alias-collapsing)
   git-context.mjs  repo root + branch for a cwd
   agents.mjs       ensureAgent (upsert+heartbeat), heartbeat, markDead, agentAlive
@@ -151,7 +151,7 @@ vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-i
                    falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
-test/              29 files — locks/board/messaging/overlap/identity/names/search/cooperation/shell-writes/insights/prepush-guard (+ helpers)
+test/              30 files — locks/board/messaging(+sender-liveness)/overlap/identity(+anchor-resolution)/names/search/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
@@ -256,16 +256,23 @@ summary+readiness, claim returns handoff, claim_next_task pull order),
 `decisions` (record/supersede/broadcast + room brief), `bash-targets`
 (shell-write detection: redirects/sed/tee/cp/mv/PowerShell cmdlets + the
 quote/heredoc/fd/null-sink false-positive guards), `bash-guard-block` (the live
-shell hook blocks a write to a peer-held file), `notify` (plan/throttle/disabled,
+shell hook blocks a write to a peer-held file; a real deploy contends for the
+held deploy lock while a read-only `gh run watch` referencing a deploy workflow
+does not), `notify` (plan/throttle/disabled,
 dry-run — no real banners), `insights` (collision hotspots + path history),
-`server-identity` (standalone server late-adopts the hook id), `resource`,
-`resource-keyword`, `precommit` (cross-agent vs self),
+`server-identity` (standalone server late-adopts the hook id, incl. the multi-pid
+`ppids` candidate set), `resource`,
+`resource-keyword` (structure-aware: quoted text + bare-word "deploy" observers
+ignored, real deploy actions caught, deploy keyed per-workspace), `precommit`
+(cross-agent vs self),
 `pending-push`, `mcp-smoke` (real MCP client), `liveness` (dead-holder + reap),
 `git-switch` (room invariant), `schema-guard`, `subagent` (distinct ids + sibling
-lock), `messages` (workspace-scoped, directed, read-once, no self-delivery),
+lock), `messages` (workspace-scoped, directed, read-once, no self-delivery, +
+`from_live` sender-liveness incl. base-fallback),
 `overlap` + `overlap-flow` (duplicate-work detection, tiebreaker, advisory→escalate
 →clear), `session-link` (claude.exe handshake: a `--tool claude-code` MCP server
-adopts the published id end-to-end; Codex stays standalone). `cli/doctor.mjs` = 9/9.
+adopts the published id end-to-end via the anchor resolver — even behind a wrapper —
+Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` = 9/9.
 
 ---
 
@@ -295,10 +302,30 @@ adopts the published id end-to-end; Codex stays standalone). `cli/doctor.mjs` = 
   id), and echoed an agent's own broadcasts back to it. Claude exposes no session
   id to MCP servers, so the bridge is the **claude.exe both processes share**:
   the SessionStart hook walks the process tree to that pid (`proc-ancestry.mjs`)
-  and writes `pid→agentId` (`session-link.mjs`); the MCP server reads it by its
-  own ppid and adopts the same id. Fail-safe: no link ⇒ standalone id, so Codex
-  is unaffected. An *adopted* server also skips teardown (the SessionEnd hook owns
-  lifecycle) so an MCP restart can't release a live session's locks.
+  and writes `pid→agentId` (`session-link.mjs`); a non-hook process adopts the same
+  id by reading the link under that pid. Fail-safe: no link ⇒ standalone id, so
+  Codex is unaffected. An *adopted* server also skips teardown (the SessionEnd hook
+  owns lifecycle) so an MCP restart can't release a live session's locks.
+
+  **The identity invariant (and why it bit — BUG 1, `docs/OBSERVED-BUGS-2026-06-18.md`).**
+  The link is keyed on the **claude.exe a process walks UP to**, never on a raw
+  `process.ppid`. The hooks always walked up (their own parent is a transient
+  spawn wrapper), but the MCP server originally read the link under its *raw* ppid
+  — which is only claude.exe when claude parents it directly. With any wrapper in
+  between (an `npx`/`.cmd` shim, a shell) the keys disagreed, so the server missed
+  the link, minted a random ghost twin, and — because reconcile used the same wrong
+  pid — never recovered: `whoami` reported one name while the hooks recorded the
+  session's leases and commits under another. Fix: **`sessionAnchorPids(ppid)` is
+  the one canonical resolver** — it returns the walked-up claude.exe pid first, then
+  the raw ppid as a fallback, and `readSessionLinkAny`/`pollSessionLinkAny` take the
+  first candidate that resolves. Every non-hook resolver routes through it (the MCP
+  server, `pending_push_review`, the `cli/pending-push.mjs` CLI), so no caller can
+  hand-roll `process.ppid` and silently reintroduce the asymmetry. Defense in depth:
+  `whoami` returns a loud `warning` whenever a `claude-code` server is still
+  unlinked (the ghost-twin signature), so a future divergence is visible, not
+  silent. Regression coverage: `test/session-link.mjs` (anchor resolution +
+  multi-candidate + the unlinked-warns self-check) and `test/server-identity.mjs`
+  (the `ppids` candidate set).
 - **Talk reaches heads-down agents (mid-turn delivery).** Messages were injected
   only at `UserPromptSubmit`, so an agent building a whole feature in one long
   turn never saw a peer's messages until it finished (the coral-mole standoff).

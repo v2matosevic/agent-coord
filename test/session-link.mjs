@@ -12,7 +12,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const home = mkdtempSync(join(tmpdir(), "coord-link-"));
 process.env.AGENT_COORD_HOME = home; // isolate BEFORE importing modules that bind COORD_HOME
-const { writeSessionLink, readSessionLink, readSessionLinkAny, pollSessionLink, pollSessionLinkAny, cachedClaudePid, reapSessionLinks } =
+const { writeSessionLink, readSessionLink, readSessionLinkAny, pollSessionLink, pollSessionLinkAny, sessionAnchorPids, cachedClaudePid, reapSessionLinks } =
   await import("../lib/session-link.mjs");
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,6 +34,16 @@ checks["readSessionLinkAny finds the link behind a non-linked first candidate"] 
 checks["readSessionLinkAny prefers the first candidate that resolves"] = readSessionLinkAny([424242, 999999]) === "umber-crane-3034";
 checks["readSessionLinkAny → null when no candidate has a link"] = readSessionLinkAny([777777, 888888]) === null;
 checks["pollSessionLinkAny resolves across candidates"] = (await pollSessionLinkAny([777777, 424242], 500)) === "umber-crane-3034";
+
+// --- unit: the canonical anchor resolver (BUG 1 prevention) ----------------
+// sessionAnchorPids is the ONE place that decides which pids to look up — so no
+// caller hand-rolls process.ppid and silently reintroduces the asymmetry.
+const BOGUS = 99999999; // no process, so no claude ancestor → just the raw pid
+const anchors = sessionAnchorPids(BOGUS);
+checks["sessionAnchorPids off a non-Claude tree → just the raw pid"] = anchors.length === 1 && anchors[0] === BOGUS;
+const dflt = sessionAnchorPids();
+checks["sessionAnchorPids includes the raw ppid as the fallback (last)"] = dflt[dflt.length - 1] === process.ppid;
+checks["sessionAnchorPids has no duplicate pids"] = new Set(dflt).size === dflt.length;
 
 // --- unit: TTL reap drops a stale link, keeps a fresh one ------------------
 mkdirSync(join(home, "session-links"), { recursive: true });
@@ -76,7 +86,9 @@ const noLinkHome = mkdtempSync(join(tmpdir(), "coord-link-nolink-"));
 const standalone = await whoamiVia("claude-code", { AGENT_COORD_HOME: noLinkHome, AGENT_COORD_LINK_POLL_MS: "200" });
 checks["unlinked claude server warns about identity"] = typeof standalone.warning === "string" && /identity not linked/i.test(standalone.warning);
 checks["unlinked claude server still returns a usable id"] = /^[a-z]+$/.test(standalone.agentId);
-rmSync(noLinkHome, { recursive: true, force: true });
+try {
+  rmSync(noLinkHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+} catch {} // Windows can hold the just-exited server's SQLite file a beat; temp dir is disposable
 
 let ok = true;
 for (const [k, v] of Object.entries(checks)) {
@@ -84,6 +96,8 @@ for (const [k, v] of Object.entries(checks)) {
   console.log(`${v ? "✅" : "❌"} ${k}`);
 }
 console.log(`claude adopted=${claude.agentId} | codex standalone=${codex.agentId} | unlinked=${standalone.agentId} (warns=${!!standalone.warning})`);
-rmSync(home, { recursive: true, force: true });
+try {
+  rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+} catch {}
 console.log(ok ? "PASS ✅ identity unification handshake" : "FAIL ❌");
 process.exit(ok ? 0 : 1);

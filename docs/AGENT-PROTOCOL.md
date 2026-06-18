@@ -16,8 +16,10 @@ shared store. This is how you stay in sync instead of stepping on each other.
   now` line arrives mid-turn the moment the holder releases / goes cold / dies.
   No blind retry loop needed: do other work and act when it arrives.
 - Before risky shell commands (`Bash` **or `PowerShell`**: dev server,
-  `drizzle-kit push`/migrations, deploy) a hook **claims the machine-wide
-  resource**; a colliding second one is blocked.
+  `drizzle-kit push`/migrations, deploy) a hook **claims the shared resource** — a
+  dev port is machine-wide (two repos on one port collide), a deploy is keyed to
+  this repo (an unrelated repo's deploy won't block yours); a colliding second one
+  is blocked.
 - `git commit` is gated globally: it's **rejected** if you stage a file another
   live agent holds. (This is the net that also catches Codex / manual commits.)
 
@@ -56,7 +58,11 @@ hear theirs. This is how you go from "avoid collisions" to actually coordinating
   alone for ~20 min", "API routes are done — safe to wire the UI now."
 - **Receive** automatically: unread messages from peers are injected into your
   context at the start of each turn (you'll see a `📬` block). `read_messages`
-  also pulls them on demand (this is the path Codex/other agents use).
+  also pulls them on demand (this is the path Codex/other agents use). The backlog
+  can span hours, so each message is tagged with whether its sender is **still
+  live** (`from_live`; exited senders are flagged) — don't plan a hand-off to an
+  agent that has already left. `list_active_agents` is the source of truth for who
+  can actually act right now.
 - `announce_intent` also broadcasts your task to the room, so peers see what you
   picked up. The statusline shows a `✉ N` unread indicator.
 

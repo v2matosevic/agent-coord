@@ -57,6 +57,17 @@ now recognizes the whole session *family* (shared base). Defense-in-depth: `whoa
 returns a loud `warning` when a claude-code server is still unlinked — the exact
 ghost-twin signature — so a future divergence is visible, never silent.
 
+**So it can't recur:** the candidate-pid logic is centralized in ONE resolver,
+`sessionAnchorPids()` (carrying the identity invariant in its doc comment — *resolve
+the session-link under the walked-up claude.exe, never a raw `process.ppid`*). Every
+non-hook identity reader routes through it, so a future caller can't hand-roll
+`process.ppid` and silently reintroduce the asymmetry. A third site surfaced during
+the sweep — `cli/pending-push.mjs` had the same blind spot (its raw ppid is the shell
+that launched it) — and now resolves through the same helper. The invariant is written
+up in `docs/SYSTEM.md` §8, and the audit confirmed these were the only three sites:
+all other `process.ppid` uses either already walk up (`parentBaseFromProc`,
+`findClaudePid`) or are unrelated (tier0 presence record, worktree ephemeral id).
+
 ---
 
 ## BUG 2 — Phantom peers: history reads as live presence (MEDIUM, UX → bad decisions)
