@@ -162,10 +162,54 @@ export const TOOL_DEFS = [
       type: "object",
       properties: {
         query: { type: "string" },
-        kinds: { type: "array", items: { type: "string", enum: ["message", "decision", "task"] } },
+        kinds: { type: "array", items: { type: "string", enum: ["message", "decision", "task", "issue"] } },
         limit: { type: "number" },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "report_issue",
+    description:
+      "Log a problem you hit — anywhere, any repo — to the durable CROSS-PROJECT issue log, so the operator can review and fix it later with full context (instead of you fixing it now or it being lost). Use for real bugs, recurring friction, broken builds, confusing/broken APIs, or coordination failures you notice. NOT for live coordination (use post_message) and not for normal task handoff (use update_task). Only `title` is required; add `body` with what happened + repro + error text + what you tried, `severity` (low|medium|high|critical), `kind` (bug|friction|build|coordination|perf|docs|other), and `area` (the file/dir/component). It's auto-tagged with this project, agent, branch, and time.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        body: { type: "string" },
+        severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+        kind: { type: "string" },
+        area: { type: "string" },
+        tags: { type: "string" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "list_issues",
+    description:
+      "Read THIS repo's issue log — known problems logged against this project, so you can check before debugging something that may already be on file (maybe with a fix from last time). Filter by `status` (open|resolved|wontfix|all, default open) and `severity`. Each issue carries its full body, reporter, and (if resolved) how it was fixed. Scoped to this workspace by design; the cross-project survey is the operator's `cli/issues.mjs`, not an in-session tool.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["open", "resolved", "wontfix", "all"] },
+        severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+        limit: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "resolve_issue",
+    description:
+      "Close out an issue from the log once it's fixed (or won't be). Pass the `issue_id`, a `resolution` (1-3 sentences on HOW it was fixed — this is what the next session reads when the same thing recurs), and optional `status` (resolved|wontfix, default resolved). Reopen with status not supported here — use the CLI.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        issue_id: { type: "string" },
+        resolution: { type: "string" },
+        status: { type: "string", enum: ["resolved", "wontfix"] },
+      },
+      required: ["issue_id"],
     },
   },
 ];

@@ -19,6 +19,7 @@ import { createTask, claimTask, claimNextTask, updateTask, listTasks } from "../
 import { recordDecision, listDecisions } from "../lib/decisions.mjs";
 import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
 import { searchRecords } from "../lib/search.mjs";
+import { reportIssue, listIssues, updateIssue, projectLabel, normSeverity } from "../lib/issues.mjs";
 import { TOOL_DEFS } from "./tool-defs.mjs";
 
 // One stdio MCP server == one agent (clients spawn it per session). This is how
@@ -251,6 +252,40 @@ function handle(name, a) {
       return { decisions: listDecisions(db, { workspaceId: ws }) };
     case "search":
       return { results: searchRecords(db, { workspaceId: ws, query: a.query, kinds: a.kinds, limit: a.limit }) };
+    case "report_issue": {
+      // Cross-project incident log: an agent that hits a real problem files it
+      // here, auto-tagged with where it happened, for the operator to review and
+      // fix later. NOT live coordination (use post_message for that) — this is the
+      // durable "check the logs" backlog surfaced by cli/issues.mjs.
+      const r = reportIssue(db, {
+        workspaceId: ws,
+        repoPath: repoRoot,
+        project: projectLabel(repoRoot),
+        agentId,
+        branch,
+        title: a.title,
+        body: a.body,
+        severity: a.severity,
+        kind: a.kind,
+        area: a.area,
+        tags: a.tags,
+      });
+      if (r.ok) logActivity(db, { agentId, workspaceId: ws, event: "issue", detail: `[${normSeverity(a.severity)}] ${String(a.title || "").slice(0, 80)}` });
+      return r.ok
+        ? { ok: true, issueId: r.issueId, note: "Logged to the cross-project issue log (durable, reviewed later via cli/issues.mjs). Don't drop what you're doing to fix it unless asked." }
+        : r;
+    }
+    case "list_issues":
+      // Workspace-scoped ONLY — like every other in-session surface (messages,
+      // decisions, tasks, search). A cross-project survey reaches other clients'
+      // issue text/paths and is the OPERATOR's job (cli/issues.mjs), not an
+      // in-repo agent's; exposing it here would break the scoping invariant.
+      return { issues: listIssues(db, { workspaceId: ws, status: a.status || "open", severity: a.severity, limit: a.limit }) };
+    case "resolve_issue": {
+      const r = updateIssue(db, { issueId: a.issue_id, agentId, status: a.status || "resolved", resolution: a.resolution });
+      if (r.ok) logActivity(db, { agentId, workspaceId: ws, event: "issue-resolve", detail: `${a.issue_id} ${a.status || "resolved"}`.trim() });
+      return r;
+    }
     default:
       throw new Error(`unknown tool: ${name}`);
   }
@@ -268,11 +303,13 @@ const INSTRUCTIONS =
   "migration/deploy; record_decision to pin choices peers must not contradict; claim_next_task pulls " +
   "ready work from the shared board, update_task(status:done, summary:...) hands off to dependents; " +
   "pending_push_review BEFORE pushing commits you didn't author (instead of asking the human); " +
-  "search to full-text query past messages/decisions/tasks ('has this been discussed or built?'). " +
+  "search to full-text query past messages/decisions/tasks/issues ('has this been discussed or built?'); " +
+  "report_issue to log a bug/footgun/broken-build you hit ANYWHERE — a durable cross-project backlog the " +
+  "operator reviews and fixes later (not live coordination). " +
   "File locks self-heal: a blocked file auto-frees minutes after its holder moves on — edit elsewhere " +
   "and retry or post_message the holder; never ask the human to unlock, never force-release a live peer.";
 
-const server = new Server({ name: "agent-coord", version: "1.3.2" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+const server = new Server({ name: "agent-coord", version: "1.4.0" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;

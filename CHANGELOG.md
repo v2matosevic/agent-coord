@@ -3,6 +3,45 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.4.0 — cross-project issue log ("come back later and fix it")
+
+A durable, machine-wide backlog of problems worth fixing later — the gap every
+other table left open. Messages, decisions, and tasks are workspace-scoped and
+short-lived (built for agents coordinating *now*, then GC'd); none of them catch
+"an agent hit a real bug / friction / broken build it shouldn't derail the current
+task to fix, and it evaporated." The next "fix this" then starts from zero context.
+
+- **`report_issue` (MCP, any repo).** An agent files a problem with one call —
+  `title` required; optional `body` (repro + error + what was tried), `severity`
+  (low|medium|high|critical), `kind` (bug|friction|build|coordination|perf|docs),
+  `area`. Auto-tagged with the project, agent, branch, and time. It's a backlog,
+  not a broadcast — it doesn't ride the 📬 channel and doesn't ask you to fix it now.
+- **`list_issues` / `resolve_issue` (MCP)** and **`cli/issues.mjs`** (the operator's
+  survey-and-close face). The MCP `list_issues` is **workspace-scoped** like every
+  other agent-facing tool — one repo's agent shouldn't read another client's backlog.
+  The **cross-project survey is the operator's CLI**: `cli/issues.mjs` lists the whole
+  machine's backlog **global by default** (grouped by repo) — the bird's-eye view that
+  makes "check the logs" work from one place — with `--here` to scope, `<id>` for full
+  context, `--add`/`--resolve`/`--reopen`, and `--export`. Resolving records a
+  `resolution` (the how-fixed note the next session reads when the same thing recurs).
+  Grouping/export key on `workspace_id`, so two repos sharing a folder name stay
+  distinct instead of merging or clobbering each other's export file.
+- **Wired into the existing substrate:** indexed into the FTS5 `search` table
+  (room-scoped, so an agent's search can't surface another project's issue) — with
+  a warm-store catch-up backfill, since `issues` is the first kind added to an index
+  that already exists on the live store (the one-shot cold backfill would skip it).
+  This repo's open-issue count is surfaced in the session brief.
+- **Durable + safe:** never auto-expires (unlike the coordination tables); markdown
+  export lands in `~/.agent-coord/issues/` (mirrors `digests/`) — *outside* any
+  repo, so the public GitHub remote can't leak client context. Additive table, **no
+  `SCHEMA_VERSION` bump**, so live v2 MCP servers don't trip the degraded flag.
+- Machine-local for v1 (like the whole system); cross-device sync (carry
+  `~/.agent-coord/issues/` over hermes) is the documented next step.
+- `test/issues.mjs` (22 checks: report/scope/severity-order/resolve-reopen/wontfix/
+  stats/proto-key-severity/basename-collision grouping+export/warm-path room-scoped
+  FTS — the test runs the warm index path so a missed-index regression can't hide).
+  Suite 30→31, all green; `doctor` 9/9; 25→28 MCP tools.
+
 ## v1.3.2 — field-report fixes: identity anchor, sender liveness, deploy scope
 
 Three problems from a live Athena session (`docs/OBSERVED-BUGS-2026-06-18.md`):

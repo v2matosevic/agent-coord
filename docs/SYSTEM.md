@@ -119,6 +119,7 @@ lib/
   overlap.mjs      duplicate-work detection (task Jaccard) + tiebreaker + advisory throttle/escalation
   tasks.mjs        shared task board — createTask (dedup, priority) / claimTask (atomic, dead-owner reclaim, returns handoff) / claimNextTask (pull best READY task) / updateTask (summary on done -> notify dependents) / listTasks (deps readiness)
   decisions.mjs    decision log — recordDecision (broadcast to room) / listDecisions (latest per topic)
+  issues.mjs       CROSS-PROJECT issue log — reportIssue (durable backlog, auto-tagged origin) / listIssues (global by default, severity-first) / getIssue / updateIssue (resolve stamps how-fixed) / issueStats. Unlike the workspace-scoped tables above, this is surveyed machine-wide and never auto-expires — the "come back later and fix it" record
   room-brief.mjs   buildRoomBrief() — session-start context: peers, board, decisions, unread
   coord-context.mjs midTurnContext() — peer messages + freed files I was blocked on + overlap advisory (PostToolUse additionalContext / UserPromptSubmit stdout)
   activity.mjs     logActivity, getFleet, queueDepth, recentActivity, getGlobalState
@@ -134,13 +135,14 @@ hooks/
   guard.mjs        PreToolUse file claim-or-block (exit 2) + notify on block; --post = heartbeat + log + mid-turn delivery (shell calls too)
   bash-guard.mjs   PreToolUse Bash|PowerShell: resource + shell-write-target claim-or-block + committer marker
 mcp/
-  server.mjs       stdio MCP server (25 tools); one process = one agent
+  server.mjs       stdio MCP server (28 tools); one process = one agent
   tool-defs.mjs    JSON-Schema tool catalog
 cli/
   statusline.mjs   Claude status line — leads with THIS terminal's own id + its subagents, then the fleet (⚠ CONTENDED / DEGRADED); also rewrites snapshot.json each tick
   status.mjs       one-shot fleet table        watch.mjs   terminal live view
   dashboard.mjs    browser dashboard (+ dashboard-ui.mjs)
   worktree.mjs     new / list / rm — physical isolation
+  issues.mjs       operator window into the cross-project issue log — list (global/--here), detail, --add, --resolve, --reopen, --export (→ ~/.agent-coord/issues/*.md, outside any repo)
   insights.mjs     terminal retro          digest.mjs   durable per-project hotspot digest → ~/.agent-coord/digests/
   macos-menubar.mjs + install-macos-menubar.mjs   SwiftBar/xbar menu-bar fleet (macOS)
   doctor.mjs       9-point health check        release.mjs  unstick leases
@@ -151,7 +153,7 @@ vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-i
                    falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
-test/              30 files — locks/board/messaging(+sender-liveness)/overlap/identity(+anchor-resolution)/names/search/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
+test/              31 files — locks/board/messaging(+sender-liveness)/overlap/identity(+anchor-resolution)/names/search/issues/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
@@ -162,7 +164,9 @@ rows, drained by `freedFileWaits` for the freed-file notify), `activity_log`,
 `messages` (workspace-scoped agent-to-agent mailbox) + `message_reads` (per-agent
 read pointer), `tasks` (workspace-scoped shared task board — owner, status,
 `depends_on`, `summary` handoff, `priority`), `decisions` (workspace-scoped
-decision log, latest per topic).
+decision log, latest per topic), `issues` (**cross-project**, durable incident
+log — origin tags `workspace_id`/`repo_path`/`project`, `severity`, `kind`,
+`status`, `resolution`; surveyed machine-wide, never auto-expires).
 
 **Scope boundary:** the store is one SQLite file per machine, so everything
 above — including `scope:'global'` messages — reaches only agents on **this**
@@ -187,20 +191,26 @@ cli/insights.mjs [--since 7d]   # retro: same-file-by-2+-agents + conflicts
 cli/digest.mjs [--since 7d]     # durable per-project hotspot digest → ~/.agent-coord/digests/
 cli/install-macos-menubar.mjs   # SwiftBar/xbar menu-bar fleet (macOS)
 cli/pending-push.mjs            # who made the unpushed commits + push verdicts
-cli/search.mjs "<query>"        # full-text search messages/decisions/tasks (--kinds, --limit)
+cli/issues.mjs                  # cross-project issue log: list (global/--here) / <id> detail / --add / --resolve / --reopen / --export
+cli/search.mjs "<query>"        # full-text search messages/decisions/tasks/issues (--kinds, --limit)
 cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 setup.mjs                       # (re)install everything, idempotent, any OS (setup.ps1 = Windows + VS Code panel)
 ```
 
-MCP tools (25, in Claude + Codex): whoami, announce_intent, list_active_agents,
+MCP tools (28, in Claude + Codex): whoami, announce_intent, list_active_agents,
 get_global_state, check_conflicts, claim_files (returns a `hotspot` warning on
 known multi-agent files), release_files, claim_resource, release_resource,
 log_activity, post_message, read_messages, pending_push_review, ask_agent,
 check_replies, reply, request_yield, query_history, list_tasks, claim_task,
 claim_next_task, update_task, record_decision, list_decisions, search
-(FTS5 full-text over messages/decisions/tasks — `lib/search.mjs`; one virtual
+(FTS5 full-text over messages/decisions/tasks/issues — `lib/search.mjs`; one virtual
 table kept in sync by SQLite triggers, backfilled once, LIKE fallback if the
-build lacks FTS5; `cli/search.mjs` is the terminal face).
+build lacks FTS5; `cli/search.mjs` is the terminal face), report_issue / list_issues /
+resolve_issue (the cross-project issue log — `lib/issues.mjs`; `report_issue` files a
+durable, origin-tagged problem from any repo, `list_issues` is workspace-scoped like
+every other in-session tool — the cross-project survey is the operator's
+`cli/issues.mjs`, not exposed to in-repo agents — `resolve_issue` records how it was
+fixed).
 
 ---
 
@@ -242,10 +252,13 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-29 tests (run isolated via `AGENT_COORD_HOME`): `identity-names` (claimed
+31 tests (run isolated via `AGENT_COORD_HOME`): `identity-names` (claimed
 single-word names: stability, 50-session uniqueness, pool exhaustion, stale
 recycle), `search` (FTS5: backfill, trigger sync, scoping, kind filter,
-punctuation-proof queries, delete cleanup), `prepush-guard` (public-remote
+punctuation-proof queries, delete cleanup), `issues` (cross-project log: report/
+title-required, global vs workspace scope, severity ordering + proto-key rejection,
+resolve/reopen/wontfix stamps, stats, basename-collision grouping + export naming,
+warm-store room-scoped FTS), `prepush-guard` (public-remote
 WIP guard: URL parse / push matrix / visibility oracle / cache),
 `path-aliasing` (platform-aware),
 `concurrency`
@@ -385,6 +398,33 @@ Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` =
   blocked/ready. Added **without a SCHEMA_VERSION bump** (the table is additive and
   never read by older code), so the live fleet's long-running v2 MCP servers don't
   trip the "schema ahead" degraded flag.
+- **Cross-project issue log (`issues.mjs` + `cli/issues.mjs`, v1.4.0).** Every other
+  store table is workspace-scoped and short-lived — built for agents coordinating in
+  real time, then GC'd. The failure they DON'T address: an agent hits a real problem
+  (a bug, a recurring friction, a broken build, a coordination footgun) that isn't
+  worth derailing the current task to fix, and it evaporates — so the next "fix this"
+  starts from zero context. The issue log is the durable, **cross-project** backlog
+  for exactly that: `report_issue` files it from any repo (auto-tagged with origin —
+  workspace/repo/project/agent/branch/area), it never auto-expires, and the operator
+  surveys the whole machine from `cli/issues.mjs` and closes each with a `resolution`
+  (the how-fixed note the next session reads when it recurs). Deliberately distinct
+  from the coordination tables: **durable** (no TTL) and **not a broadcast** (a
+  backlog to review later, not live chatter — so it doesn't ride the 📬 channel).
+  **Scoping split (deliberate):** the rows are cross-project, but the *global survey*
+  is the OPERATOR's surface (`cli/issues.mjs`) only — the in-session MCP `list_issues`
+  is **workspace-scoped like every other agent-facing tool**, because one repo's agent
+  has no business reading another client's backlog (titles, bodies, absolute paths).
+  Reuses the existing substrate end-to-end: additive table (**no SCHEMA_VERSION
+  bump**), indexed into the FTS5 `search` table — room-scoped, and with a warm-store
+  catch-up backfill since `issues` is the first kind added to an index that already
+  exists on the live store (the one-shot cold backfill would skip it) — and a per-repo
+  open-issue line added to the session brief. The `project` label is a basename for
+  readability, but grouping/export key on `workspace_id` (`groupIssuesByRepo` /
+  `issueFileName`), so two repos sharing a folder name don't merge or clobber each
+  other's export file. Markdown export goes to `~/.agent-coord/issues/` (mirrors
+  `digests/`) — **outside any repo**, since the public GitHub remote means a committed
+  export would leak client context. Machine-local like the rest of the system;
+  cross-device (carry `~/.agent-coord/issues/` over hermes) is the next step.
 
 ---
 

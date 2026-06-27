@@ -134,7 +134,34 @@ best matches first with «highlighted» snippets:
 
 - Picking up vague or resumed work → `search("checkout webhook")` before
   building from scratch; a peer's done-summary or warning may already cover it.
-- Optional `kinds: ["message"|"decision"|"task"]` narrows; default searches all.
+- Optional `kinds: ["message"|"decision"|"task"|"issue"]` narrows; default searches all.
+
+## Report problems you hit — the cross-project issue log
+
+When you run into a real problem that isn't worth derailing the current task to
+fix — a bug, a recurring friction, a broken build, a confusing/broken API, a
+coordination footgun — **log it** instead of letting it evaporate. The operator
+reviews the backlog later and fixes things with full context, so the next session
+doesn't start blind.
+
+- **`report_issue(title, …)`** files it to a durable, **cross-project** log (it
+  outlives this session and isn't tied to one repo). Add `body` (what happened +
+  how to reproduce + the error text + what you tried), `severity`
+  (low|medium|high|critical), `kind` (bug|friction|build|coordination|perf|docs),
+  and `area` (the file/dir). It's auto-tagged with this project, you, the branch,
+  and the time — so a one-line title is the only hard requirement.
+- This is **not** live coordination (use `post_message` for "leave lib/auth
+  alone") and **not** task handoff (use `update_task`). It's a backlog to fix
+  later — don't drop what you're doing to fix the issue unless asked.
+- **Check before you debug:** your session brief shows this repo's open-issue
+  count, and `list_issues` (scoped to THIS repo, like every other in-session tool)
+  plus `search` surface problems already on file — the thing you're chasing may
+  already be logged, maybe even with a `resolution` from last time. (The
+  cross-project survey is the operator's `cli/issues.mjs`, not an in-session tool —
+  one repo's agent has no business reading another client's backlog.)
+- Fixed one? `resolve_issue(issue_id, resolution)` records HOW — that note is what
+  pays off when the same thing recurs. The operator's terminal view is
+  `node $AGENT_COORD/cli/issues.mjs` (global survey, detail, resolve, export).
 
 ## Before pushing commits you didn't make
 

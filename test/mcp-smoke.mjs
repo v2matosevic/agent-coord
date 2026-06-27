@@ -42,10 +42,20 @@ try {
   console.log("claim_task:    ", JSON.stringify(await call("claim_task", { title: "demo: wire the thing" })));
   console.log("list_tasks:    ", JSON.stringify((await call("list_tasks")).tasks.map((t) => `${t.task_id}:${t.status}`)));
 
-  const expected = ["whoami", "announce_intent", "claim_files", "list_active_agents", "get_global_state", "check_conflicts", "release_files", "claim_resource", "release_resource", "log_activity", "post_message", "read_messages", "pending_push_review", "ask_agent", "check_replies", "reply", "request_yield", "list_tasks", "claim_task", "update_task"];
+  // Issue log: file one, see it listed open, resolve it, see it drop from the open list.
+  const rep = await call("report_issue", { title: "smoke: flaky build", body: "EPERM on rename", severity: "high", kind: "build" });
+  console.log("report_issue:  ", JSON.stringify(rep));
+  const openBefore = (await call("list_issues")).issues;
+  console.log("list_issues:   ", JSON.stringify(openBefore.map((i) => `${i.issue_id}:${i.severity}:${i.status}`)));
+  console.log("resolve_issue: ", JSON.stringify(await call("resolve_issue", { issue_id: rep.issueId, resolution: "pinned vite, retry-on-EPERM" })));
+  const openAfter = (await call("list_issues")).issues;
+  const issueWorks = !!rep.issueId && openBefore.some((i) => i.issue_id === rep.issueId) && !openAfter.some((i) => i.issue_id === rep.issueId);
+  console.log("issue lifecycle:", issueWorks ? "ok (filed → listed → resolved → cleared)" : "BROKEN");
+
+  const expected = ["whoami", "announce_intent", "claim_files", "list_active_agents", "get_global_state", "check_conflicts", "release_files", "claim_resource", "release_resource", "log_activity", "post_message", "read_messages", "pending_push_review", "ask_agent", "check_replies", "reply", "request_yield", "list_tasks", "claim_task", "update_task", "report_issue", "list_issues", "resolve_issue"];
   const haveAll = expected.every((t) => tools.includes(t));
-  console.log(haveAll ? "PASS ✅ MCP server speaks the protocol; tools work" : "FAIL ❌ missing tools: " + expected.filter((t) => !tools.includes(t)));
-  failed = !haveAll;
+  console.log(haveAll && issueWorks ? "PASS ✅ MCP server speaks the protocol; tools work" : "FAIL ❌ " + (haveAll ? "issue lifecycle broken" : "missing tools: " + expected.filter((t) => !tools.includes(t))));
+  failed = !haveAll || !issueWorks;
 } catch (e) {
   console.log("FAIL ❌", e.message);
   failed = true;

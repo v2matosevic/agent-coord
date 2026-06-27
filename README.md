@@ -163,7 +163,32 @@ All CLIs run under `node --disable-warning=ExperimentalWarning <script>`.
 `release_resource`, `log_activity`, `post_message`, `read_messages`,
 `pending_push_review`, `ask_agent`, `check_replies`, `reply`, `request_yield`,
 `query_history`, `list_tasks`, `claim_task`, `claim_next_task`, `update_task`,
-`record_decision`, `list_decisions`, `search`.
+`record_decision`, `list_decisions`, `search`, `report_issue`, `list_issues`,
+`resolve_issue`.
+
+## Issue log — "come back later and fix it" (cross-project)
+
+The coordination tables above are workspace-scoped and short-lived — built for
+agents working *together* right now. The **issue log** is the opposite: a durable,
+**cross-project** backlog of problems worth fixing later. An agent that hits a real
+bug, a recurring friction, a broken build, or a coordination failure — in *any*
+repo — files it with `report_issue` (auto-tagged with the project, agent, branch,
+and area). The operator surveys the whole machine's backlog from one place and
+fixes them on their own time, so a future "fix this" starts with full context
+instead of from zero.
+
+```bash
+node cli/issues.mjs                       # open issues across ALL projects (grouped)
+node cli/issues.mjs --here                # only the current repo
+node cli/issues.mjs i-1a2b3c4d            # full context of one issue
+node cli/issues.mjs --resolve <id> "how it was fixed"
+node cli/issues.mjs --export              # mirror to ~/.agent-coord/issues/*.md
+```
+
+Issues are also indexed by `search` (so "has this come up before?" finds them) and
+this repo's open count shows in every agent's session brief. Stored in the global
+SQLite store and (on `--export`) mirrored to `~/.agent-coord/issues/` — outside any
+repo, so client context never leaks into a public push. Machine-local for now.
 
 ## VS Code extension (optional)
 
