@@ -25,15 +25,17 @@ shared store. This is how you stay in sync instead of stepping on each other.
 
 ## What you should do proactively
 
-1. **Look before you leap.** At the start of a task, check who else is active and
-   what they hold — don't assume you're alone:
-   - MCP tool: `list_active_agents` / `get_global_state` (available in Claude & Codex), or
-   - shell: `node --disable-warning=ExperimentalWarning $AGENT_COORD/cli/status.mjs`
-   If a peer is already on the area you were about to touch, **pick different
-   work or coordinate** — don't duplicate or contradict them.
-2. **Announce your intent.** Call `announce_intent` with a one-line task so peers
-   see what you're doing. (Claude also captures this from your prompt.)
-3. **Respect a block — but it self-heals.** An `exit 2` means a peer is
+1. **Check in with ONE call: `announce_intent`.** Announce a one-line task before
+   starting — the response is the whole check-in: `brief` (who you are, live
+   peers + their tasks, the board, standing decisions, unread mail) plus
+   `overlaps`/`warning` if a peer is already on similar work. No separate
+   `whoami`/`list_active_agents`/`list_tasks` round needed — spend those calls
+   only when you need detail the brief didn't carry (`get_global_state` for
+   leases, `cli/status.mjs` from a shell). If a peer is already on the area you
+   were about to touch, **pick different work or coordinate** — don't duplicate
+   or contradict them. (Claude also captures your task from the prompt, and gets
+   the same brief free at session start.)
+2. **Respect a block — but it self-heals.** An `exit 2` means a peer is
    *actively* editing that file right now (a lock goes **cold** and stops
    blocking a few minutes after the holder moves on — so abandoned files free
    themselves; you never need to force-release a stale lock or ask the human to
@@ -41,9 +43,9 @@ shared store. This is how you stay in sync instead of stepping on each other.
    `post_message` the holder to coordinate. The block message tells you roughly
    when it auto-frees. Force-release (`cli/release.mjs`) is a true last resort
    only if a holder is wedged/dead and you can't wait.
-4. **Check in periodically** during long tasks — a peer may have started since you
+3. **Check in periodically** during long tasks — a peer may have started since you
    began. A quick `list_active_agents` keeps the codebase coherent.
-5. **Want hard isolation?** `node $AGENT_COORD/cli/worktree.mjs new`
+4. **Want hard isolation?** `node $AGENT_COORD/cli/worktree.mjs new`
    gives you your own worktree + branch + port so you physically can't collide;
    merge back when done.
 

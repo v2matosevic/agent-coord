@@ -50,9 +50,11 @@ checks["brief: board with ready count + priority"] = !!brief && brief.includes("
 checks["brief: standing decisions"] = !!brief && brief.includes("[db]") && brief.includes("[auth]");
 checks["brief: unread mail"] = !!brief && brief.includes("✉ 1 unread");
 
-// Empty room -> silent (no noise for the solo case).
+// Empty room -> still the identity one-liner (a solo agent must learn its own
+// name for free — that used to cost a whoami tool call), and nothing more.
 const emptyWs = workspaceId("/t/decide-empty-" + process.pid);
-checks["empty room -> null brief"] = buildRoomBrief(db, { agentId: B, workspaceId: emptyWs, repoRoot: "/t/x" }) === null;
+const solo = buildRoomBrief(db, { agentId: B, workspaceId: emptyWs, repoRoot: "/t/x" });
+checks["empty room -> identity line only"] = !!solo && solo.includes(`you are ${B}`) && solo.includes("alone") && !solo.includes("\n");
 
 clean();
 let ok = true;
@@ -60,5 +62,5 @@ for (const [k, v] of Object.entries(checks)) {
   if (!v) ok = false;
   console.log(`${v ? "✅" : "❌"} ${k}`);
 }
-console.log(ok ? "PASS ✅ decisions: record/supersede/broadcast · room brief informs, silent when empty" : "FAIL ❌");
+console.log(ok ? "PASS ✅ decisions: record/supersede/broadcast · room brief informs, identity-only when empty" : "FAIL ❌");
 process.exit(ok ? 0 : 1);

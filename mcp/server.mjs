@@ -8,7 +8,9 @@ import { getDb } from "../lib/store.mjs";
 import { ensureAgent, heartbeat, setIntent, markDead } from "../lib/agents.mjs";
 import { claimFile, releaseFile, claimResource, releaseResource, releaseAllForAgent, peekConflicts } from "../lib/leases.mjs";
 import { logActivity, getFleet, getGlobalState } from "../lib/activity.mjs";
-import { postMessage, readMessages, findReplies, annotateSenders } from "../lib/messages.mjs";
+import { postMessage, readMessages, findReplies, annotateSenders, unreadCount } from "../lib/messages.mjs";
+import { buildRoomBrief } from "../lib/room-brief.mjs";
+import { MSG_READ_MAX } from "../lib/config.mjs";
 import { analyzePendingPush } from "../lib/pending-push.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
@@ -125,7 +127,16 @@ function handle(name, a) {
         const p = overlaps[0];
         warning = `⚠ ${p.agentId} is on overlapping work ("${p.task}") but started after you — you have priority. Consider post_message to split scope cleanly.`;
       }
-      return { ok: true, agentId, task: a.task, overlaps, warning };
+      // Fold the room brief in, so announcing IS the check-in: identity, peers,
+      // board, standing decisions, unread count — one call instead of a
+      // whoami + list_active_agents + list_tasks round each with its own schema
+      // load. This is the ONLY awareness channel a hookless agent (Codex) has
+      // at session start — Claude gets the same brief free from SessionStart.
+      let brief = null;
+      try {
+        brief = buildRoomBrief(db, { agentId, workspaceId: ws, repoRoot });
+      } catch {}
+      return { ok: true, agentId, task: a.task, overlaps, warning, brief };
     }
     case "list_active_agents":
       return { agents: a.scope === "workspace" ? getFleet(db).filter((x) => x.repo_path && workspaceId(x.repo_path) === ws) : getFleet(db) };
@@ -137,13 +148,23 @@ function handle(name, a) {
       // backlog can span hours and prior sessions, so a sender is frequently an
       // agent that has since exited. Flag those so "wrote a message" isn't read as
       // "here now and able to take a hand-off."
-      const messages = annotateSenders(db, readMessages(db, { agentId, workspaceId: ws }));
+      // Capped per call (context budget) but lossless: the read pointer stops at
+      // the last returned message, so the remainder comes on the next call.
+      const messages = annotateSenders(db, readMessages(db, { agentId, workspaceId: ws, limit: MSG_READ_MAX }));
       const gone = [...new Set(messages.filter((m) => !m.from_live).map((m) => m.from_agent))];
       const out = { messages };
+      if (messages.length === MSG_READ_MAX) {
+        const more = unreadCount(db, { agentId, workspaceId: ws });
+        if (more > 0) out.remaining = more;
+      }
+      const notes = [];
+      if (out.remaining) notes.push(`${out.remaining} more unread — call read_messages again for the rest.`);
       if (gone.length)
-        out.note =
+        notes.push(
           `Senders no longer active: ${gone.join(", ")}. They've exited — don't plan hand-offs to them or treat ` +
-          `their messages as live presence; check list_active_agents for who can actually act.`;
+            `their messages as live presence; check list_active_agents for who can actually act.`,
+        );
+      if (notes.length) out.note = notes.join(" ");
       return out;
     }
     case "pending_push_review":
@@ -297,8 +318,10 @@ function handle(name, a) {
 // and must stay well under the client's 2KB truncation.
 const INSTRUCTIONS =
   "Coordinates ALL AI coding agents on this machine — you are one agent among live peers who may be " +
-  "editing the same repo, dev port, or DB right now. Protocol: announce_intent BEFORE starting work " +
-  "(warns about duplicate work; later starter narrows its lane); list_active_agents to see who's here; " +
+  "editing the same repo, dev port, or DB right now. Protocol: announce_intent BEFORE starting work — " +
+  "one call IS the whole check-in: it returns your identity, live peers, the task board, standing " +
+  "decisions, and unread mail (`brief`), plus a duplicate-work warning (later starter narrows its lane) — " +
+  "no separate whoami/list_active_agents needed; " +
   "post_message/reply to coordinate (delivered to peers mid-turn); claim_resource before dev-server/" +
   "migration/deploy; record_decision to pin choices peers must not contradict; claim_next_task pulls " +
   "ready work from the shared board, update_task(status:done, summary:...) hands off to dependents; " +
@@ -309,7 +332,7 @@ const INSTRUCTIONS =
   "File locks self-heal: a blocked file auto-frees minutes after its holder moves on — edit elsewhere " +
   "and retry or post_message the holder; never ask the human to unlock, never force-release a live peer.";
 
-const server = new Server({ name: "agent-coord", version: "1.4.0" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+const server = new Server({ name: "agent-coord", version: "1.5.0" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;

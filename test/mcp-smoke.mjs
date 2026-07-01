@@ -26,8 +26,14 @@ try {
 
   const call = async (name, args = {}) => JSON.parse((await client.callTool({ name, arguments: args })).content[0].text);
 
-  console.log("whoami:        ", JSON.stringify(await call("whoami")));
-  console.log("announce:      ", JSON.stringify(await call("announce_intent", { task: "wire MCP" })));
+  const me = await call("whoami");
+  console.log("whoami:        ", JSON.stringify(me));
+  // announce is the one-call check-in: must carry the room brief (identity even
+  // when alone) — for a hookless agent (Codex) this is its ONLY awareness channel.
+  const ann = await call("announce_intent", { task: "wire MCP" });
+  console.log("announce:      ", JSON.stringify(ann));
+  const briefOk = typeof ann.brief === "string" && ann.brief.includes(`you are ${me.agentId}`);
+  console.log("announce brief:", briefOk ? "ok (identity present)" : "BROKEN: " + JSON.stringify(ann.brief));
   console.log("claim:         ", JSON.stringify(await call("claim_files", { paths: ["src/x.ts"] })));
   console.log("claim (self):  ", JSON.stringify(await call("claim_files", { paths: ["src/x.ts"] })));
   console.log("check_conflict:", JSON.stringify(await call("check_conflicts", { paths: ["src/x.ts"] })));
@@ -54,8 +60,12 @@ try {
 
   const expected = ["whoami", "announce_intent", "claim_files", "list_active_agents", "get_global_state", "check_conflicts", "release_files", "claim_resource", "release_resource", "log_activity", "post_message", "read_messages", "pending_push_review", "ask_agent", "check_replies", "reply", "request_yield", "list_tasks", "claim_task", "update_task", "report_issue", "list_issues", "resolve_issue"];
   const haveAll = expected.every((t) => tools.includes(t));
-  console.log(haveAll && issueWorks ? "PASS ✅ MCP server speaks the protocol; tools work" : "FAIL ❌ " + (haveAll ? "issue lifecycle broken" : "missing tools: " + expected.filter((t) => !tools.includes(t))));
-  failed = !haveAll || !issueWorks;
+  console.log(
+    haveAll && issueWorks && briefOk
+      ? "PASS ✅ MCP server speaks the protocol; tools work"
+      : "FAIL ❌ " + (!haveAll ? "missing tools: " + expected.filter((t) => !tools.includes(t)) : !issueWorks ? "issue lifecycle broken" : "announce brief broken"),
+  );
+  failed = !haveAll || !issueWorks || !briefOk;
 } catch (e) {
   console.log("FAIL ❌", e.message);
   failed = true;

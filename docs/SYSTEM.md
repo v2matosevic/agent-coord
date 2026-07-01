@@ -120,7 +120,7 @@ lib/
   tasks.mjs        shared task board — createTask (dedup, priority) / claimTask (atomic, dead-owner reclaim, returns handoff) / claimNextTask (pull best READY task) / updateTask (summary on done -> notify dependents) / listTasks (deps readiness)
   decisions.mjs    decision log — recordDecision (broadcast to room) / listDecisions (latest per topic)
   issues.mjs       CROSS-PROJECT issue log — reportIssue (durable backlog, auto-tagged origin) / listIssues (global by default, severity-first) / getIssue / updateIssue (resolve stamps how-fixed) / issueStats. Unlike the workspace-scoped tables above, this is surveyed machine-wide and never auto-expires — the "come back later and fix it" record
-  room-brief.mjs   buildRoomBrief() — session-start context: peers, board, decisions, unread
+  room-brief.mjs   buildRoomBrief() — arrival context: peers, board, decisions, unread; ALWAYS carries the identity line (solo case included) and is returned by announce_intent too (one-call check-in)
   coord-context.mjs midTurnContext() — peer messages + freed files I was blocked on + overlap advisory (PostToolUse additionalContext / UserPromptSubmit stdout)
   activity.mjs     logActivity, getFleet, queueDepth, recentActivity, getGlobalState
   insights.mjs     shared read-only analysis — collisionHotspots (same file, 2+ agents) + pathHistory (powers query_history)
@@ -218,8 +218,11 @@ fixed).
 
 See [`AGENT-PROTOCOL.md`](./AGENT-PROTOCOL.md). In short: **Claude is enforced
 automatically** (you don't have to remember). But every agent should *also*
-proactively (a) check the fleet before starting (`list_active_agents` /
-`cli/status.mjs`), (b) `announce_intent` so peers see the task, (c) treat an
+proactively (a) `announce_intent` before starting — one call that both tells
+peers the task AND returns the room `brief` (identity, live peers, board,
+decisions, unread) + overlap warnings, so a check-in never needs a separate
+`whoami`/`list_active_agents` round, (b) reach for `list_active_agents` /
+`get_global_state` / `cli/status.mjs` only for detail beyond the brief, (c) treat an
 `exit 2` block or a rejected commit as "a peer owns this — coordinate, don't
 fight it", and (d) **talk**: `post_message` to coordinate with peers in the same
 repo; unread messages are injected into a Claude agent's context each turn (and
@@ -278,10 +281,12 @@ dry-run — no real banners), `insights` (collision hotspots + path history),
 `resource-keyword` (structure-aware: quoted text + bare-word "deploy" observers
 ignored, real deploy actions caught, deploy keyed per-workspace), `precommit`
 (cross-agent vs self),
-`pending-push`, `mcp-smoke` (real MCP client), `liveness` (dead-holder + reap),
+`pending-push`, `mcp-smoke` (real MCP client, incl. announce returning the room
+brief), `liveness` (dead-holder + reap),
 `git-switch` (room invariant), `schema-guard`, `subagent` (distinct ids + sibling
 lock), `messages` (workspace-scoped, directed, read-once, no self-delivery, +
-`from_live` sender-liveness incl. base-fallback),
+`from_live` sender-liveness incl. base-fallback, + capped batch reads that drain
+losslessly in order),
 `overlap` + `overlap-flow` (duplicate-work detection, tiebreaker, advisory→escalate
 →clear), `session-link` (claude.exe handshake: a `--tool claude-code` MCP server
 adopts the published id end-to-end via the anchor resolver — even behind a wrapper —
@@ -398,7 +403,26 @@ Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` =
   blocked/ready. Added **without a SCHEMA_VERSION bump** (the table is additive and
   never read by older code), so the live fleet's long-running v2 MCP servers don't
   trip the "schema ahead" degraded flag.
-- **Cross-project issue log (`issues.mjs` + `cli/issues.mjs`, v1.4.0).** Every other
+- **Context-budget diet + one-call check-in (v1.5.0).** The coordination layer
+  writes INTO model context (hook stdout, MCP results), so its own chattiness is
+  a token cost multiplied across the fleet. Three changes, all additive:
+  (1) **The room brief always carries the identity line.** It used to return
+  `null` for the solo-empty case ("stay silent"), which meant a solo agent never
+  learned its own coordination name and spent tool calls (`whoami` + schema
+  load) to find out — the exact opposite of the intended economy. One line
+  (`you are badger — alone here right now`) is strictly cheaper.
+  (2) **`announce_intent` returns the `brief`.** The prescribed check-in was
+  3–4 tool calls (`whoami` → `list_active_agents` → `list_tasks`/`read_messages`);
+  now announcing IS the check-in. This matters double for hookless agents
+  (Codex): they get no SessionStart brief, so the announce response is their
+  only arrival-awareness channel — Claude and Codex now see the same picture.
+  (3) **Read caps, lossless and loud.** `read_messages` (MSG_READ_MAX 30/call)
+  and mid-turn delivery (MSG_DELIVER_MAX 15/event) cap what one turn ingests,
+  but the read pointer advances only past what was RETURNED, so a big backlog
+  drains across calls with nothing skipped or redelivered, and every truncation
+  says so (`remaining` + note). `get_global_state` caps its lists at
+  STATE_LIST_MAX (50) newest rows with an explicit `note` when it clips —
+  a truncated dump must never read as "that was everything". Every other
   store table is workspace-scoped and short-lived — built for agents coordinating in
   real time, then GC'd. The failure they DON'T address: an agent hits a real problem
   (a bug, a recurring friction, a broken build, a coordination footgun) that isn't

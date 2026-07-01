@@ -12,7 +12,7 @@ export const TOOL_DEFS = [
   {
     name: "announce_intent",
     description:
-      "Broadcast what you're about to work on so peers can see it. Call before starting a task. Returns `overlaps` + a `warning` if a live peer in this repo is already doing similar work — if you're the later starter, narrow your lane or hand off instead of duplicating.",
+      "Your ONE check-in call — announce what you're about to work on, before starting a task. Returns `brief` (who you are, live peers here, the task board, standing decisions, unread mail — no separate whoami/list_active_agents/list_tasks needed) plus `overlaps` + a `warning` if a live peer is already doing similar work — if you're the later starter, narrow your lane or hand off instead of duplicating.",
     inputSchema: { type: "object", properties: { task: { type: "string" } }, required: ["task"] },
   },
   {
@@ -27,12 +27,12 @@ export const TOOL_DEFS = [
   },
   {
     name: "read_messages",
-    description: "Read messages other agents left for you in this workspace (plus global broadcasts). Marks them read. Each message carries `from_live` — false means that sender has since EXITED, so don't treat its message as live presence or plan a hand-off to it. Call when you start a task and periodically during long work.",
+    description: "Read messages other agents left for you in this workspace (plus global broadcasts). Marks them read. Each message carries `from_live` — false means that sender has since EXITED, so don't treat its message as live presence or plan a hand-off to it. A big backlog is delivered in batches — if the result carries `remaining`, call again for the rest. Call when you start a task and periodically during long work.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "get_global_state",
-    description: "Full snapshot: agents, file leases, resource leases, queue, recent activity.",
+    description: "Full snapshot: agents, file leases, resource leases, queue, recent activity. Long lists are capped at the newest rows (a `note` says when) — use check_conflicts/list_tasks for a scoped full view.",
     inputSchema: { type: "object", properties: {} },
   },
   {

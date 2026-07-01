@@ -3,6 +3,37 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.5.0 — context-budget diet + one-call check-in
+
+The coordination layer writes INTO model context (hook stdout, MCP results), so
+its own chattiness is a token cost paid by every agent on the machine. This
+release makes arrival cheaper and delivery bounded — awareness for fewer tokens.
+
+- **A solo agent now learns its own name for free.** The room brief used to stay
+  silent when you were alone with an empty board — so a solo agent never saw
+  "you are badger" and spent tool calls (`whoami` + schema load) to find out.
+  The brief now always opens with the identity line; the solo case is exactly
+  one line.
+- **`announce_intent` is the whole check-in.** Its response now carries `brief`
+  — identity, live peers + tasks, the board, standing decisions, unread count —
+  alongside the existing `overlaps`/`warning`. One call replaces the
+  `whoami` → `list_active_agents` → `list_tasks` round. Biggest win for
+  **hookless agents (Codex)**: they get no SessionStart brief, so announce is
+  their only arrival-awareness channel — Claude and Codex now arrive equally
+  informed.
+- **Bounded, lossless message delivery.** `read_messages` returns at most 30
+  per call and mid-turn/prompt-time injection at most 15 per event — but the
+  read pointer only advances past what was actually returned, so a day's
+  backlog drains across calls in order, nothing skipped, nothing redelivered.
+  Truncation is always announced (`remaining` + a note), never silent.
+- **`get_global_state` capped.** Leases/queue/tasks lists return the 50 newest
+  rows each, with an explicit `note` when clipped pointing at the scoped tools
+  (`check_conflicts`, `list_tasks`).
+- New coverage: capped batch reads drain losslessly in order (`test/messages.mjs`),
+  announce carries the brief end-to-end over a real MCP client (`test/mcp-smoke.mjs`),
+  solo brief is identity-only (`test/decisions.mjs`). Caps live in `lib/config.mjs`
+  (`MSG_READ_MAX`, `MSG_DELIVER_MAX`, `STATE_LIST_MAX`).
+
 ## v1.4.0 — cross-project issue log ("come back later and fix it")
 
 A durable, machine-wide backlog of problems worth fixing later — the gap every

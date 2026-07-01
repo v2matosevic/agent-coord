@@ -63,8 +63,34 @@ const live = Object.fromEntries(annotated.map((m) => [m.from_agent, m.from_live]
 cleanLive();
 
 const liveOk = live[LIVE] === true && live[GONE] === false && live[SUB] === true;
-const pass = bMsgs.length === 2 && aMsgs.length === 0 && bAgain.length === 0 && cUnread === 1 && liveOk;
+
+// --- capped, lossless batch reads -------------------------------------------
+// A limited read must return at most `limit` messages AND advance the pointer
+// only past what it returned, so the backlog drains across calls with nothing
+// skipped and nothing redelivered.
+const wsQ = "msg-cap-" + process.pid;
+const [SND, RCV] = ["cap-s-" + process.pid, "cap-r-" + process.pid];
+const cleanCap = () =>
+  writeTxn(db, () => {
+    db.prepare("DELETE FROM messages WHERE workspace_id=?").run(wsQ);
+    db.prepare("DELETE FROM message_reads WHERE agent_id=?").run(RCV);
+    db.prepare("DELETE FROM agents WHERE agent_id IN (?,?)").run(SND, RCV);
+  });
+cleanCap();
+for (const id of [SND, RCV]) ensureAgent(db, { agentId: id, repoPath: "/t", branch: "m" });
+for (let i = 1; i <= 5; i++) postMessage(db, { fromAgent: SND, workspaceId: wsQ, body: "m" + i });
+const batch1 = readMessages(db, { agentId: RCV, workspaceId: wsQ, limit: 2 });
+const afterBatch1 = unreadCount(db, { agentId: RCV, workspaceId: wsQ });
+const batch2 = readMessages(db, { agentId: RCV, workspaceId: wsQ, limit: 2 });
+const batch3 = readMessages(db, { agentId: RCV, workspaceId: wsQ, limit: 2 });
+const drained = unreadCount(db, { agentId: RCV, workspaceId: wsQ });
+cleanCap();
+const seen = [...batch1, ...batch2, ...batch3].map((m) => m.body).join(",");
+const capOk = batch1.length === 2 && afterBatch1 === 3 && batch2.length === 2 && batch3.length === 1 && drained === 0 && seen === "m1,m2,m3,m4,m5";
+
+const pass = bMsgs.length === 2 && aMsgs.length === 0 && bAgain.length === 0 && cUnread === 1 && liveOk && capOk;
 console.log(`B sees ${bMsgs.length} (want 2) | A sees own ${aMsgs.length} (want 0) | B re-read ${bAgain.length} (want 0) | C unread ${cUnread} (want 1)`);
 console.log(`from_live: LIVE=${live[LIVE]} GONE=${live[GONE]} SUB(base-fallback)=${live[SUB]} (want true,false,true)`);
-console.log(pass ? "PASS ✅ workspace-scoped, directed, read-once, no self-delivery, sender liveness" : "FAIL ❌");
+console.log(`capped reads: 2+2+1 in order, ${afterBatch1} left after first (want 3), ${drained} after all (want 0) -> ${capOk ? "ok" : "BROKEN: " + seen}`);
+console.log(pass ? "PASS ✅ workspace-scoped, directed, read-once, no self-delivery, sender liveness, lossless capped reads" : "FAIL ❌");
 process.exit(pass ? 0 : 1);
