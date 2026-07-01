@@ -3,6 +3,35 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.6.0 — hot-path diet (hooks ~2x faster)
+
+The hooks run on EVERY tool call of every agent on the machine. Measured on
+macOS: PostToolUse was 56ms and the Bash PreToolUse guard 92ms per event —
+against a 30ms node-boot floor. Both are now 38ms; a shell call's total hook
+overhead dropped from ~148ms to ~76ms. Three changes, measured not guessed:
+
+- **`gitContext` no longer shells out on the happy path.** `git rev-parse`
+  spawns (2-3 per event) were the single largest cost after node boot. The repo
+  root now comes from walking up to `.git` and the branch from parsing `HEAD`
+  directly — normal repos, linked worktrees, and submodules (`gitdir:` pointer
+  files) all covered, root realpathed to match git's output exactly (verified
+  against real git on detached HEAD, slashed branches, worktrees, symlinked
+  paths). Anything unparseable (or `GIT_DIR`/`GIT_WORK_TREE` overrides) falls
+  through to the real subprocess, so correctness never rides on the parser.
+- **Heartbeat throttle.** A bare heartbeat is a `BEGIN IMMEDIATE` write txn
+  that moves `last_heartbeat` by seconds nobody reads. A local marker file
+  (`~/.agent-coord/hb/<agent>`, mtime = last real DB heartbeat) now skips bare
+  heartbeats and hot-path `ensureAgent` upserts while fresh
+  (`HB_THROTTLE_MS` 45s — 4x under `DEAD_MS`, so liveness semantics are
+  untouched). Task/intent writes always land; `markDead` clears the marker so
+  a released agent re-registers on its next event; any fs error reads as
+  "not fresh" → full DB path (fail-open to correctness).
+- **Empty-mailbox fast path.** `readMessages` probed for unread with a
+  read-only query before opening its write transaction — the common "no mail"
+  event no longer takes the store's write lock at all.
+
+`test/heartbeat-throttle.mjs` pins the skip/write/clear semantics (33 tests).
+
 ## v1.5.1 — review fixes for the v1.5.0 caps
 
 A by-the-book self-review of v1.5.0 (8 finder angles, adversarial verify) found

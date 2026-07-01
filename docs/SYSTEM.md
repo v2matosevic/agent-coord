@@ -113,8 +113,8 @@ lib/
   proc-ancestry.mjs findClaudePid() — walk the process tree to the shared claude.exe (cross-platform)
   session-link.mjs claude.exe→agentId handshake so the MCP server adopts the hook identity (no ghost twin); sessionAnchorPids() is the canonical "which pids to resolve identity under" helper (the identity invariant — never the raw ppid)
   path-canon.mjs   canonicalRepoRoot/workspaceId (room key) + canonicalFilePath (alias-collapsing)
-  git-context.mjs  repo root + branch for a cwd
-  agents.mjs       ensureAgent (upsert+heartbeat), heartbeat, markDead, agentAlive
+  git-context.mjs  repo root + branch for a cwd — pure-fs (.git walk + HEAD parse, realpathed root; worktree/submodule gitdir pointers handled), subprocess fallback for anything unparseable
+  agents.mjs       ensureAgent (upsert+heartbeat), heartbeat (bare calls throttled via a local marker file, HB_THROTTLE_MS << DEAD_MS), markDead (clears marker), agentAlive
   leases.mjs       claimFile/releaseFile/peekConflicts, claimResource/releaseResource, enqueue, releaseAllForAgent
   overlap.mjs      duplicate-work detection (task Jaccard) + tiebreaker + advisory throttle/escalation
   tasks.mjs        shared task board — createTask (dedup, priority) / claimTask (atomic, dead-owner reclaim, returns handoff) / claimNextTask (pull best READY task) / updateTask (summary on done -> notify dependents) / listTasks (deps readiness)
@@ -153,7 +153,7 @@ vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-i
                    falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
-test/              32 files — locks/board/messaging(+sender-liveness+capped-batch)/global-state-cap/overlap/identity(+anchor-resolution)/names/search/issues/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
+test/              33 files — locks/board/messaging(+sender-liveness+capped-batch)/global-state-cap/overlap/identity(+anchor-resolution)/names/search/issues/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
@@ -255,7 +255,7 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-32 tests (run isolated via `AGENT_COORD_HOME`): `identity-names` (claimed
+33 tests (run isolated via `AGENT_COORD_HOME`): `identity-names` (claimed
 single-word names: stability, 50-session uniqueness, pool exhaustion, stale
 recycle), `search` (FTS5: backfill, trigger sync, scoping, kind filter,
 punctuation-proof queries, delete cleanup), `issues` (cross-project log: report/
@@ -423,6 +423,17 @@ Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` =
   says so (`remaining` + note). `get_global_state` caps its lists at
   STATE_LIST_MAX (50) newest rows with an explicit `note` when it clips —
   a truncated dump must never read as "that was everything".
+
+  **v1.6.0 hot-path diet.** The hooks fire on every tool call fleet-wide;
+  measured (macOS, 30ms node-boot floor): PostToolUse 56ms, Bash PreToolUse
+  92ms → both 38ms. (1) `gitContext` resolves root+branch by fs (.git walk +
+  HEAD parse, realpathed) instead of 2-3 `git rev-parse` spawns — the largest
+  cost after boot; subprocess remains the fallback. (2) Bare heartbeats and
+  hot-path `ensureAgent` upserts are skipped while a local marker file is
+  fresh (`HB_THROTTLE_MS` 45s, 4x under `DEAD_MS`; task/intent writes always
+  land, `markDead` clears the marker, fs errors fail open to the DB path).
+  (3) `readMessages` probes read-only before taking its write txn, so the
+  common no-mail event never touches the store's write lock.
 
   **v1.5.1 hardening (self-review of the above).** Three fixes from reviewing
   v1.5.0: (a) the `get_global_state` cap moved OUT of `getGlobalState()` into

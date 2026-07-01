@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolveAgentId } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded, clearDegraded } from "../lib/store.mjs";
-import { ensureAgent, heartbeat } from "../lib/agents.mjs";
+import { ensureAgent, heartbeatFresh } from "../lib/agents.mjs";
 import { claimFile, enqueue } from "../lib/leases.mjs";
 import { logActivity } from "../lib/activity.mjs";
 import { workspaceId, canonicalFilePath, isRepoRelative } from "../lib/path-canon.mjs";
@@ -39,10 +39,13 @@ try {
   const db = getDb();
   const { repoRoot, branch } = gitContext(cwd);
   const ws = workspaceId(repoRoot);
-  ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
+  // This hook fires on EVERY tool call; skip the upsert (a write txn on the
+  // shared store) while the local heartbeat marker is fresh — the row exists
+  // and is at most HB_THROTTLE_MS stale. ensureAgent itself refreshes the
+  // marker, so a stale/missing marker self-heals on the next event.
+  if (!heartbeatFresh(agentId)) ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
 
   if (POST) {
-    heartbeat(db, agentId);
     // Shell calls (Bash/PowerShell) ride this hook too, with no file_path —
     // they still heartbeat and deliver, so an agent deep in a test/build loop
     // isn't deaf to peers; only the edit log needs a path. PostToolUseFailure

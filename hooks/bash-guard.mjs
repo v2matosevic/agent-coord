@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolveAgentId } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded } from "../lib/store.mjs";
-import { ensureAgent } from "../lib/agents.mjs";
+import { ensureAgent, heartbeatFresh } from "../lib/agents.mjs";
 import { claimResource, claimFile, enqueue } from "../lib/leases.mjs";
 import { logActivity } from "../lib/activity.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
@@ -39,7 +39,9 @@ try {
   const db = getDb();
   const { repoRoot, branch } = gitContext(cwd);
   const ws = workspaceId(repoRoot);
-  ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
+  // Fires on every shell call — skip the upsert write txn while the local
+  // heartbeat marker is fresh (see guard.mjs / lib/agents.mjs).
+  if (!heartbeatFresh(agentId)) ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
 
   const isCommit = /\bgit\s+commit\b/.test(command);
   if (isCommit) writeCommitterMarker(repoRoot, agentId);
