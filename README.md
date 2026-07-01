@@ -134,8 +134,23 @@ guards fail **open but loud**: you lose coordination, never your work.
   can see.
 - **Searchable memory.** Everything above accumulates into the store, and
   `search` (FTS5 full-text) answers "has this been discussed / decided / built
-  already?" across messages, decisions, and tasks — best match first, not just
-  chronological dumps.
+  already?" across messages, decisions, tasks, and issues — best match first,
+  not just chronological dumps.
+- **One-call check-in, token-frugal by design.** The coordination layer writes
+  INTO model context, so its own chattiness is a cost every agent pays.
+  `announce_intent` returns the whole arrival brief (your identity, live peers +
+  their tasks, the board, standing decisions, unread mail) — one call instead of
+  a `whoami`/`list_active_agents`/`list_tasks` round, and the only arrival
+  channel a hookless agent (Codex) has. Every list an agent ingests is capped
+  but **lossless and loud**: message backlogs drain in batches with an exact
+  `remaining` count (a directed message stuck behind broadcasts is flagged
+  urgently), and truncation always says so — a partial dump never reads as
+  "that was everything".
+- **Hooks fast enough to forget.** They run on every tool call, so they're
+  measured, not guessed: repo root + branch resolved by filesystem instead of
+  `git rev-parse` spawns (subprocess fallback for exotic layouts), liveness
+  writes throttled through a local marker, and no write lock taken to discover
+  an empty mailbox. ~38ms per event on macOS against a ~30ms node-boot floor.
 
 ---
 
@@ -151,7 +166,7 @@ node cli/worktree.mjs new           # isolate an agent: own worktree + branch + 
 node cli/insights.mjs [--since 7d]  # retro: files edited by 2+ agents + conflicts
 node cli/digest.mjs [--since 7d]    # write a durable per-project hotspot digest (~/.agent-coord/digests/)
 node cli/pending-push.mjs           # who authored the unpushed commits + push verdicts
-node cli/search.mjs "<query>"       # full-text search messages/decisions/tasks (--kinds, --limit)
+node cli/search.mjs "<query>"       # full-text search messages/decisions/tasks/issues (--kinds, --limit)
 node cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 ```
 All CLIs run under `node --disable-warning=ExperimentalWarning <script>`.
