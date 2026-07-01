@@ -36,9 +36,9 @@ checks["latest per topic, newest first"] =
   ds.length === 2 && ds[0].topic === "db" && ds[1].topic === "auth" && ds[1].decision.includes("sessions");
 
 // Broadcast: peers hear it; the author doesn't get their own echo.
-const bMail = readMessages(db, { agentId: B, workspaceId: ws });
+const bMail = readMessages(db, { agentId: B, workspaceId: ws }).messages;
 checks["peer hears the decision"] = bMail.some((m) => m.body.includes("📌") && m.body.includes("[db]"));
-checks["author not echoed"] = !readMessages(db, { agentId: A, workspaceId: ws }).some((m) => m.body.includes("📌"));
+checks["author not echoed"] = !readMessages(db, { agentId: A, workspaceId: ws }).messages.some((m) => m.body.includes("📌"));
 
 // Room brief: B arrives -> sees peer A, the board, decisions, unread mail.
 createTask(db, { workspaceId: ws, title: "open work item", priority: 3 });

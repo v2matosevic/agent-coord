@@ -153,7 +153,7 @@ vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-i
                    falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
-test/              31 files — locks/board/messaging(+sender-liveness)/overlap/identity(+anchor-resolution)/names/search/issues/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
+test/              32 files — locks/board/messaging(+sender-liveness+capped-batch)/global-state-cap/overlap/identity(+anchor-resolution)/names/search/issues/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
@@ -255,7 +255,7 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-31 tests (run isolated via `AGENT_COORD_HOME`): `identity-names` (claimed
+32 tests (run isolated via `AGENT_COORD_HOME`): `identity-names` (claimed
 single-word names: stability, 50-session uniqueness, pool exhaustion, stale
 recycle), `search` (FTS5: backfill, trigger sync, scoping, kind filter,
 punctuation-proof queries, delete cleanup), `issues` (cross-project log: report/
@@ -422,7 +422,25 @@ Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` =
   drains across calls with nothing skipped or redelivered, and every truncation
   says so (`remaining` + note). `get_global_state` caps its lists at
   STATE_LIST_MAX (50) newest rows with an explicit `note` when it clips —
-  a truncated dump must never read as "that was everything". Every other
+  a truncated dump must never read as "that was everything".
+
+  **v1.5.1 hardening (self-review of the above).** Three fixes from reviewing
+  v1.5.0: (a) the `get_global_state` cap moved OUT of `getGlobalState()` into
+  the MCP handler (`cap` is opt-in) — the same function feeds human-facing
+  surfaces (menubar contention badge, dashboard, snapshot → fleet view) that
+  derive counts and conflict detection from list *lengths* and never render
+  `note`, so capping them hid real lease collisions and clamped every count at
+  50 exactly when the fleet was busiest; the capped variant now also covers
+  `resourceLeases` (was inconsistently unbounded). (b) `readMessages` returns
+  `{ messages, remaining, remainingDirected }` computed in the same transaction
+  on ONE shared predicate (`UNREAD_WHERE`) — callers no longer re-derive the
+  remainder with a `length === cap` heuristic plus a twin `unreadCount` query
+  that could silently drift. (c) Delivery is FIFO (the pointer is a seq
+  watermark — nothing may jump the line or it would skip rows), so a DIRECTED
+  message stuck behind ≥cap broadcasts (a `request_yield`, an ask) was neither
+  injected nor desktop-bannered that event; `remainingDirected` now triggers an
+  explicit "addressed to YOU — read_messages now" line plus the banner the
+  moment it exists, instead of N tool calls later. Every other
   store table is workspace-scoped and short-lived — built for agents coordinating in
   real time, then GC'd. The failure they DON'T address: an agent hits a real problem
   (a bug, a recurring friction, a broken build, a coordination footgun) that isn't

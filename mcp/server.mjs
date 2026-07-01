@@ -8,9 +8,9 @@ import { getDb } from "../lib/store.mjs";
 import { ensureAgent, heartbeat, setIntent, markDead } from "../lib/agents.mjs";
 import { claimFile, releaseFile, claimResource, releaseResource, releaseAllForAgent, peekConflicts } from "../lib/leases.mjs";
 import { logActivity, getFleet, getGlobalState } from "../lib/activity.mjs";
-import { postMessage, readMessages, findReplies, annotateSenders, unreadCount } from "../lib/messages.mjs";
+import { postMessage, readMessages, findReplies, annotateSenders } from "../lib/messages.mjs";
 import { buildRoomBrief } from "../lib/room-brief.mjs";
-import { MSG_READ_MAX } from "../lib/config.mjs";
+import { MSG_READ_MAX, STATE_LIST_MAX } from "../lib/config.mjs";
 import { analyzePendingPush } from "../lib/pending-push.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
@@ -149,16 +149,17 @@ function handle(name, a) {
       // agent that has since exited. Flag those so "wrote a message" isn't read as
       // "here now and able to take a hand-off."
       // Capped per call (context budget) but lossless: the read pointer stops at
-      // the last returned message, so the remainder comes on the next call.
-      const messages = annotateSenders(db, readMessages(db, { agentId, workspaceId: ws, limit: MSG_READ_MAX }));
+      // the last returned message, so the remainder comes on the next call —
+      // and readMessages itself reports the exact remainder.
+      const { messages: raw, remaining } = readMessages(db, { agentId, workspaceId: ws, limit: MSG_READ_MAX });
+      const messages = annotateSenders(db, raw);
       const gone = [...new Set(messages.filter((m) => !m.from_live).map((m) => m.from_agent))];
       const out = { messages };
-      if (messages.length === MSG_READ_MAX) {
-        const more = unreadCount(db, { agentId, workspaceId: ws });
-        if (more > 0) out.remaining = more;
-      }
       const notes = [];
-      if (out.remaining) notes.push(`${out.remaining} more unread — call read_messages again for the rest.`);
+      if (remaining > 0) {
+        out.remaining = remaining;
+        notes.push(`${remaining} more unread — call read_messages again for the rest.`);
+      }
       if (gone.length)
         notes.push(
           `Senders no longer active: ${gone.join(", ")}. They've exited — don't plan hand-offs to them or treat ` +
@@ -195,7 +196,11 @@ function handle(name, a) {
         note: "Delivered. The peer hears this between its tool calls (mid-turn). If it agrees, it should release_files and stop. If it's not live and doesn't reply, proceed.",
       };
     case "get_global_state":
-      return getGlobalState(db);
+      // Cap ONLY here: this result lands in model context. The same function
+      // feeds human-facing surfaces (menubar, dashboard, snapshot/fleet view)
+      // that derive counts and conflict badges from list lengths — those get
+      // the complete lists (the default).
+      return getGlobalState(db, { cap: STATE_LIST_MAX });
     case "check_conflicts":
       return {
         conflicts: (a.paths || [])
@@ -332,7 +337,7 @@ const INSTRUCTIONS =
   "File locks self-heal: a blocked file auto-frees minutes after its holder moves on — edit elsewhere " +
   "and retry or post_message the holder; never ask the human to unlock, never force-release a live peer.";
 
-const server = new Server({ name: "agent-coord", version: "1.5.0" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+const server = new Server({ name: "agent-coord", version: "1.5.1" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;

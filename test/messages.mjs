@@ -29,9 +29,9 @@ postMessage(db, { fromAgent: A, workspaceId: wsA, body: "hello room" }); // broa
 postMessage(db, { fromAgent: A, workspaceId: wsA, body: "hey B", toAgent: B }); // directed to B
 postMessage(db, { fromAgent: C, workspaceId: wsB, body: "other repo" }); // different workspace
 
-const bMsgs = readMessages(db, { agentId: B, workspaceId: wsA }); // broadcast + directed = 2
-const aMsgs = readMessages(db, { agentId: A, workspaceId: wsA }); // own messages excluded = 0
-const bAgain = readMessages(db, { agentId: B, workspaceId: wsA }); // already read = 0
+const bMsgs = readMessages(db, { agentId: B, workspaceId: wsA }).messages; // broadcast + directed = 2
+const aMsgs = readMessages(db, { agentId: A, workspaceId: wsA }).messages; // own messages excluded = 0
+const bAgain = readMessages(db, { agentId: B, workspaceId: wsA }).messages; // already read = 0
 const cUnread = unreadCount(db, { agentId: C, workspaceId: wsA }); // broadcast only (not directed-to-B) = 1
 
 clean();
@@ -58,16 +58,18 @@ postMessage(db, { fromAgent: GONE, workspaceId: wsL, body: "was here hours ago" 
 postMessage(db, { fromAgent: SUB, workspaceId: wsL, body: "subagent note" });
 // Drop SUB's own row so its presence can only come from its live base (LIVE).
 writeTxn(db, () => db.prepare("DELETE FROM agents WHERE agent_id=?").run(SUB));
-const annotated = annotateSenders(db, readMessages(db, { agentId: READER, workspaceId: wsL }));
+const annotated = annotateSenders(db, readMessages(db, { agentId: READER, workspaceId: wsL }).messages);
 const live = Object.fromEntries(annotated.map((m) => [m.from_agent, m.from_live]));
 cleanLive();
 
 const liveOk = live[LIVE] === true && live[GONE] === false && live[SUB] === true;
 
 // --- capped, lossless batch reads -------------------------------------------
-// A limited read must return at most `limit` messages AND advance the pointer
-// only past what it returned, so the backlog drains across calls with nothing
-// skipped and nothing redelivered.
+// A limited read must return at most `limit` messages, advance the pointer only
+// past what it returned (backlog drains across calls, nothing skipped or
+// redelivered), report the EXACT remainder itself, and flag when any of the
+// remainder is a directed-to-me message stuck behind broadcasts (the urgent
+// case callers must surface immediately).
 const wsQ = "msg-cap-" + process.pid;
 const [SND, RCV] = ["cap-s-" + process.pid, "cap-r-" + process.pid];
 const cleanCap = () =>
@@ -78,19 +80,23 @@ const cleanCap = () =>
   });
 cleanCap();
 for (const id of [SND, RCV]) ensureAgent(db, { agentId: id, repoPath: "/t", branch: "m" });
-for (let i = 1; i <= 5; i++) postMessage(db, { fromAgent: SND, workspaceId: wsQ, body: "m" + i });
+for (let i = 1; i <= 4; i++) postMessage(db, { fromAgent: SND, workspaceId: wsQ, body: "m" + i });
+postMessage(db, { fromAgent: SND, workspaceId: wsQ, body: "m5-yield", toAgent: RCV }); // directed, LAST in line
 const batch1 = readMessages(db, { agentId: RCV, workspaceId: wsQ, limit: 2 });
-const afterBatch1 = unreadCount(db, { agentId: RCV, workspaceId: wsQ });
 const batch2 = readMessages(db, { agentId: RCV, workspaceId: wsQ, limit: 2 });
 const batch3 = readMessages(db, { agentId: RCV, workspaceId: wsQ, limit: 2 });
 const drained = unreadCount(db, { agentId: RCV, workspaceId: wsQ });
 cleanCap();
-const seen = [...batch1, ...batch2, ...batch3].map((m) => m.body).join(",");
-const capOk = batch1.length === 2 && afterBatch1 === 3 && batch2.length === 2 && batch3.length === 1 && drained === 0 && seen === "m1,m2,m3,m4,m5";
+const seen = [...batch1.messages, ...batch2.messages, ...batch3.messages].map((m) => m.body).join(",");
+const capOk =
+  batch1.messages.length === 2 && batch1.remaining === 3 && batch1.remainingDirected === 1 && // yield stuck behind broadcasts -> flagged
+  batch2.messages.length === 2 && batch2.remaining === 1 && batch2.remainingDirected === 1 &&
+  batch3.messages.length === 1 && batch3.remaining === 0 && batch3.remainingDirected === 0 && // final batch: nothing left
+  drained === 0 && seen === "m1,m2,m3,m4,m5-yield";
 
 const pass = bMsgs.length === 2 && aMsgs.length === 0 && bAgain.length === 0 && cUnread === 1 && liveOk && capOk;
 console.log(`B sees ${bMsgs.length} (want 2) | A sees own ${aMsgs.length} (want 0) | B re-read ${bAgain.length} (want 0) | C unread ${cUnread} (want 1)`);
 console.log(`from_live: LIVE=${live[LIVE]} GONE=${live[GONE]} SUB(base-fallback)=${live[SUB]} (want true,false,true)`);
-console.log(`capped reads: 2+2+1 in order, ${afterBatch1} left after first (want 3), ${drained} after all (want 0) -> ${capOk ? "ok" : "BROKEN: " + seen}`);
+console.log(`capped reads: 2+2+1 in order, remaining ${batch1.remaining},${batch2.remaining},${batch3.remaining} (want 3,1,0), directed-flag ${batch1.remainingDirected},${batch2.remainingDirected},${batch3.remainingDirected} (want 1,1,0) -> ${capOk ? "ok" : "BROKEN: " + seen}`);
 console.log(pass ? "PASS ✅ workspace-scoped, directed, read-once, no self-delivery, sender liveness, lossless capped reads" : "FAIL ❌");
 process.exit(pass ? 0 : 1);

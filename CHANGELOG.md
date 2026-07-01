@@ -3,6 +3,37 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.5.1 — review fixes for the v1.5.0 caps
+
+A by-the-book self-review of v1.5.0 (8 finder angles, adversarial verify) found
+one real regression and three design warts. All fixed:
+
+- **The `get_global_state` cap broke human-facing surfaces.** `getGlobalState()`
+  also feeds the macOS menubar, the browser dashboard, `snapshot.json` → the
+  VS Code fleet view, and `state-json` — all of which derive counts and the
+  lease-contention badge from list lengths and none of which render the `note`.
+  With >50 live leases a real two-agent collision could vanish from the menu
+  bar. The cap is now **opt-in** (`getGlobalState(db, { cap })`) and applied
+  only in the MCP handler; default callers get complete lists again. The capped
+  variant now also caps `resourceLeases` (was inconsistently unbounded).
+- **A directed message could wait behind broadcasts, silently.** Delivery is
+  FIFO (the read pointer is a seq watermark), so a `request_yield` or ask
+  behind ≥15 older broadcasts wasn't injected OR desktop-bannered that event.
+  `readMessages` now reports `remainingDirected`; mid-turn delivery flags
+  "addressed directly to YOU — read_messages now" and fires the banner the
+  moment such a message exists.
+- **`readMessages` owns its truncation math.** It returns
+  `{ messages, remaining, remainingDirected }` computed in the same transaction
+  on one shared `UNREAD_WHERE` predicate (also reused by `unreadCount`), with
+  the fetch pushed to SQL (`LIMIT ?+1`). The two call sites' fragile
+  `length === cap` + twin-query reconstruction is gone.
+- **Room-brief mail line no longer steers Claude into a redundant call** — the
+  wording now leads with "they reach you automatically if you're hook-wired"
+  and offers `read_messages` as the pull fallback.
+- New `test/global-state-cap.mjs` (default complete + conflict pair visible;
+  capped clips every list and names each in `note`); capped-read test now
+  asserts exact `remaining` and the directed-remainder flag. 32 tests.
+
 ## v1.5.0 — context-budget diet + one-call check-in
 
 The coordination layer writes INTO model context (hook stdout, MCP results), so

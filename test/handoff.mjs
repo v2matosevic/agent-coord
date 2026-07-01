@@ -34,7 +34,7 @@ readMessages(db, { agentId: B, workspaceId: ws }); // drain so we only see the n
 
 // A finishes t1 with a handoff summary -> B (owner of t2 AND t3) is told, with readiness per task.
 updateTask(db, { taskId: t1.taskId, agentId: A, status: "done", summary: "REST routes in src/api/, auth via middleware, see routes.test.ts" });
-const bMail = readMessages(db, { agentId: B, workspaceId: ws });
+const bMail = readMessages(db, { agentId: B, workspaceId: ws }).messages;
 const t2Note = bMail.find((m) => m.body.includes(t2.taskId));
 const t3Note = bMail.find((m) => m.body.includes(t3.taskId));
 checks["dependent owner notified on done"] = !!t2Note && t2Note.to_agent === B;
