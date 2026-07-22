@@ -120,7 +120,7 @@ lib/
   tasks.mjs        shared task board — createTask (dedup, priority) / claimTask (atomic, dead-owner reclaim, returns handoff) / claimNextTask (pull best READY task) / updateTask (summary on done -> notify dependents) / listTasks (deps readiness)
   decisions.mjs    decision log — recordDecision (broadcast to room) / listDecisions (latest per topic)
   issues.mjs       CROSS-PROJECT issue log — reportIssue (durable backlog, auto-tagged origin) / listIssues (global by default, severity-first) / getIssue / updateIssue (resolve stamps how-fixed) / issueStats. Unlike the workspace-scoped tables above, this is surveyed machine-wide and never auto-expires — the "come back later and fix it" record
-  room-brief.mjs   buildRoomBrief() — arrival context: peers, board, decisions, unread; ALWAYS carries the identity line (solo case included) and is returned by announce_intent too (one-call check-in)
+  room-brief.mjs   buildRoomBrief() — arrival context: peers, board, decisions, unread; ALWAYS carries the identity line (solo case included) and is returned by announce_intent too (one-call check-in); in the agent-coord repo itself it also surfaces open coord-tool issues filed from OTHER repos (self-triage — the one deliberate crack in workspace scoping)
   coord-context.mjs midTurnContext() — peer messages + freed files I was blocked on + overlap advisory (PostToolUse additionalContext / UserPromptSubmit stdout)
   activity.mjs     logActivity, getFleet, queueDepth, recentActivity, getGlobalState
   insights.mjs     shared read-only analysis — collisionHotspots (same file, 2+ agents) + pathHistory (powers query_history)
@@ -406,6 +406,25 @@ Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` =
   blocked/ready. Added **without a SCHEMA_VERSION bump** (the table is additive and
   never read by older code), so the live fleet's long-running v2 MCP servers don't
   trip the "schema ahead" degraded flag.
+- **v1.6.1/v1.6.2 field-fix wave (2026-07-22) — the issue log pointed at the tool
+  itself, and the backlog got cleared.** (1) **MCP arg validation** (`mcp/args.mjs`):
+  model-supplied args went straight into SQL and node:sqlite rejects
+  undefined/boolean/object — a misnamed `body` died as "cannot be bound to SQLite
+  parameter 5" (reported 7×). All 28 tools now normalize against their declared
+  inputSchema; missing required fields fail with an error naming the field + the
+  keys received. `whoami` carries `version` so a stale long-running server is
+  diagnosable. (2) **Real dev-port resolution**: the dev-server rule resolves
+  command flag → package script → .env PORT → framework default, and falls back to
+  a workspace-scoped `dev-server:<ws>` key instead of a guessed machine-wide
+  `port:3000` (an Astro repo's `pnpm dev` was blocking on an unrelated Next
+  server's lock). (3) **Own-commit recognition hardened**: precommit-check was the
+  last identity reader not routed through `sessionAnchorPids()` — it trusted only
+  the 30s committer marker, so a chained `test && commit` or a subagent-held lease
+  blocked the agent's own commit; it now lazily resolves the session-link and
+  compares by session family (base id). (4) **Self-triage in the brief**: coord-tool
+  issues filed from other repos surface in the agent-coord repo's own room brief
+  (`coordToolIssues`), closing the loop that let 5 duplicate reports of one bug sit
+  unread for three weeks.
 - **Context-budget diet + one-call check-in (v1.5.0).** The coordination layer
   writes INTO model context (hook stdout, MCP results), so its own chattiness is
   a token cost multiplied across the fleet. Three changes, all additive:

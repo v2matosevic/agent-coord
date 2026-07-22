@@ -3,6 +3,9 @@
 // resource, AND a read-only run observer that merely references a deploy workflow
 // isn't misread as a deploy (BUG 3B). Per-project resources (deploy) are keyed to
 // the workspace so unrelated repos don't serialize each other (BUG 3A).
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { detectResources } from "../lib/resource-rules.mjs";
 
 const ids = (cmd, opts) => detectResources(cmd, opts).map((r) => r.resourceId);
@@ -47,5 +50,33 @@ check(depA[0] === "deploy:wsAAAA" && depB[0] === "deploy:wsBBBB", "deploy id fol
 check(depA[0] !== depB[0], "different repos → different deploy keys → no cross-project block");
 check(ids("next dev", { workspaceId: "wsAAAA" })[0] === "port:3000", "a port stays machine-wide (not workspace-keyed)");
 
-console.log(ok ? "PASS ✅ structure-aware, observer-safe, per-repo deploy scoping" : "FAIL ❌");
+// --- i-231005d4: resolve the REAL dev port, never a guessed port:3000 -------
+// `pnpm dev` in an Astro repo (port 4321) used to claim port:3000 and
+// false-contend with an unrelated repo's Next server.
+const mkRepo = (files) => {
+  const dir = mkdtempSync(join(tmpdir(), "coord-rr-"));
+  for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
+  return dir;
+};
+
+const astroRepo = mkRepo({ "package.json": JSON.stringify({ scripts: { dev: "astro dev" } }) });
+check(ids("pnpm dev", { workspaceId: "wsA", repoRoot: astroRepo })[0] === "port:4321", "pnpm dev + astro script → port:4321 (framework default via package.json)");
+
+const scriptPortRepo = mkRepo({ "package.json": JSON.stringify({ scripts: { dev: "next dev --port 4001" } }) });
+check(ids("npm run dev", { workspaceId: "wsA", repoRoot: scriptPortRepo })[0] === "port:4001", "explicit port in the dev script wins");
+
+const envPortRepo = mkRepo({ "package.json": JSON.stringify({ scripts: { dev: "next dev" } }), ".env": "DB_URL=x\nPORT=4002\n" });
+check(ids("pnpm dev", { workspaceId: "wsA", repoRoot: envPortRepo })[0] === "port:4002", ".env PORT beats the framework default (Next honors PORT)");
+
+check(ids("pnpm dev --port 5000", { workspaceId: "wsA", repoRoot: astroRepo })[0] === "port:5000", "explicit port on the command beats everything");
+
+const opaqueRepo = mkRepo({ "package.json": JSON.stringify({ scripts: { dev: "node server.mjs" } }) });
+const opaque = detectResources("pnpm dev", { workspaceId: "wsA", repoRoot: opaqueRepo })[0];
+check(opaque.resourceId === "dev-server:wsA" && opaque.scope === "workspace", "unresolvable port → workspace-scoped dev-server key, not a guessed port:3000");
+
+check(ids("PORT=4003 npm run dev", { workspaceId: "wsA", repoRoot: opaqueRepo })[0] === "port:4003", "PORT= env prefix on the command resolves");
+
+for (const d of [astroRepo, scriptPortRepo, envPortRepo, opaqueRepo]) rmSync(d, { recursive: true, force: true });
+
+console.log(ok ? "PASS ✅ structure-aware, observer-safe, per-repo deploy scoping, real-port resolution" : "FAIL ❌");
 process.exit(ok ? 0 : 1);

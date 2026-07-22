@@ -50,8 +50,10 @@ try {
   // a message mentioning "deploy"/"migrate" (incl. -m and heredoc/-F forms) can't trip it.
   if (!isCommit) {
     // Pass the workspace so a per-project resource (deploy) is keyed to THIS repo —
-    // a deploy in another repo must not block a command here (BUG 3A).
-    for (const r of detectResources(command, { workspaceId: ws })) {
+    // a deploy in another repo must not block a command here (BUG 3A) — and the
+    // repo root so the dev-server rule can resolve the project's REAL port
+    // (package script / .env) instead of guessing 3000 (i-231005d4).
+    for (const r of detectResources(command, { workspaceId: ws, repoRoot })) {
       const res = claimResource(db, { agentId, resourceId: r.resourceId, reason: r.label });
       if (!res.granted) {
         logActivity(db, { agentId, workspaceId: ws, event: "resource-conflict", detail: r.resourceId });

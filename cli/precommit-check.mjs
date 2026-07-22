@@ -4,6 +4,8 @@ import { getDb, nowIso, isoAgoMs } from "../lib/store.mjs";
 import { DEAD_MS, FILE_ACTIVE_MS } from "../lib/config.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { readCommitterMarker } from "../lib/committer.mjs";
+import { sessionAnchorPids, readSessionLinkAny } from "../lib/session-link.mjs";
+import { baseAgentId } from "../lib/identity.mjs";
 
 // This script's own sibling — so the hint below points at the real release.mjs
 // wherever the project lives, not a hardcoded path.
@@ -36,10 +38,29 @@ try {
   const deadcut = isoAgoMs(DEAD_MS);
   const coldcut = isoAgoMs(FILE_ACTIVE_MS);
   const now = nowIso();
-  const conflicts = [];
+  let conflicts = [];
   for (const f of staged) {
     const row = stmt.get(ws, canonicalFilePath(f, repoRoot), deadcut, now, coldcut, self);
     if (row) conflicts.push(row);
+  }
+
+  if (conflicts.length) {
+    // The marker is a 30s-TTL stamp from the shell guard's PreToolUse — a
+    // chained command (`npm test && git commit`) outlives it, and a lease held
+    // by this session's SUBAGENT carries a `base/sub-x` id the exact-match SQL
+    // above can't see as self. Before blocking, resolve the committing SESSION
+    // via the session-link under the walked-up claude.exe anchor (the identity
+    // invariant, SYSTEM.md §8) and drop any "conflict" whose holder is the same
+    // session family. Lazy on purpose: the process-tree walk runs only when a
+    // block is otherwise imminent, so the common clean commit stays cheap.
+    // (Field report i-3eeb7ef8: an agent's own shell-claimed .gitignore lease
+    // blocked its own commit.)
+    let linked = null;
+    try {
+      linked = readSessionLinkAny(sessionAnchorPids());
+    } catch {}
+    const selfBases = new Set([self, linked].filter((x) => x && x !== "__none__").map(baseAgentId));
+    conflicts = conflicts.filter((c) => !selfBases.has(baseAgentId(c.agent_id)));
   }
 
   if (conflicts.length) {

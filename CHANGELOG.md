@@ -3,6 +3,49 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.6.2 — field-fix wave: real dev ports, own-commit recognition, self-triage
+
+Clears the rest of the issue-log backlog that pointed at the tool itself:
+
+- **The dev-server guard resolves the REAL port (i-231005d4).** `pnpm dev` in
+  an Astro repo (actual port 4321) used to claim a hardcoded `port:3000` and
+  hard-block against an unrelated repo's Next server. `resource-rules.mjs` now
+  resolves: explicit `--port`/`-p`/`PORT=` on the command → the package script
+  the command runs (`scripts.dev` names the framework and often the port) →
+  the repo's `.env`/`.env.local` `PORT` (Next/Nuxt/Remix honor it, so it beats
+  the framework default) → framework defaults (astro 4321, vite 5173,
+  next/nuxt/remix 3000). Only when nothing resolves does it fall back — to a
+  **workspace-scoped** `dev-server:<ws>` key, so two dev servers in one repo
+  still serialize but unrelated repos never false-block on a guessed number.
+  The guard passes `repoRoot` through; file reads only happen on dev-server
+  commands, never on the hook's hot path.
+- **The commit net recognizes its own session (i-3eeb7ef8).** The pre-commit
+  guard identified the committer ONLY via a 30s-TTL marker stamped at
+  PreToolUse — a chained `npm test && git commit` outlived it, and a lease
+  held by this session's own subagent (`base/sub-x`) failed the exact-id
+  match; both made an agent's own commit read as cross-agent (bear's own
+  `.gitignore` lease blocked bear's commit, twice). Before blocking, the guard
+  now also resolves the committing session via the session-link under the
+  walked-up claude.exe anchor (the §8 identity invariant — precommit-check was
+  the last identity reader NOT routed through it) and compares by session
+  FAMILY (`baseAgentId`), so a subagent's lease never blocks its parent.
+  Lazy: the process-tree walk runs only when a block is imminent, so clean
+  commits stay cheap.
+- **Coord-tool field reports reach the repo that can fix them.** `report_issue`
+  tags an issue with the workspace it was hit in, so bugs *about agent-coord*
+  filed from client repos were invisible to the agent-coord repo's own scoped
+  `list_issues` — five duplicate reports of one bug sat unread for three
+  weeks. The room brief (SessionStart + announce) in the agent-coord repo now
+  carries a `🔧 N open issues about agent-coord filed from other repos` block
+  (top 3, severity-first) via `coordToolIssues()` — filtered to issues naming
+  a coord tool/hook or `kind:coordination`, so another client's unrelated
+  backlog never bleeds into a session's context. Gated by workspace identity
+  of the checkout the code runs from.
+- Tests extended in place: `resource-keyword` (7 port-resolution cases incl.
+  the workspace fallback), `precommit` (foreign-marker block, link rescue,
+  subagent-family pass), `issues` (coordToolIssues filter/scope + the brief
+  gate). 34 tests green.
+
 ## v1.6.1 — MCP arg validation (kills the field-reported binding-error class)
 
 The issue log's own backlog pointed at the system: "post_message fails —

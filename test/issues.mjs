@@ -4,8 +4,11 @@
 import { getDb } from "../lib/store.mjs";
 import { ensureAgent } from "../lib/agents.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
-import { reportIssue, listIssues, getIssue, updateIssue, issueStats, projectLabel, groupIssuesByRepo, issueFileName } from "../lib/issues.mjs";
+import { reportIssue, listIssues, getIssue, updateIssue, issueStats, projectLabel, groupIssuesByRepo, issueFileName, coordToolIssues } from "../lib/issues.mjs";
 import { searchRecords } from "../lib/search.mjs";
+import { buildRoomBrief } from "../lib/room-brief.mjs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const db = getDb();
 
@@ -101,6 +104,27 @@ ok("unique label keeps clean filename", issueFileName({ project: "agent-coord", 
 const found = searchRecords(db, { workspaceId: wsA, query: "EPERM rename", kinds: ["issue"] });
 ok("warm-path search finds issue in its room", found.length >= 1 && found.some((f) => f.ref === i1.issueId));
 ok("search is room-scoped (B can't see A's issue)", searchRecords(db, { workspaceId: wsB, query: "EPERM rename", kinds: ["issue"] }).length === 0);
+
+// Self-triage: a session IN the agent-coord repo must hear about open issues
+// that mention the coordination tool but were filed from OTHER repos (the one
+// deliberate crack in workspace scoping — otherwise field reports about the
+// tool never reach the repo that can fix them). Unrelated client issues must
+// NOT bleed through.
+reportIssue(db, { workspaceId: wsA, repoPath: repoA, agentId: "rep-a", title: "post_message fails with SQLite binding error", kind: "bug" });
+reportIssue(db, { workspaceId: wsA, repoPath: repoA, agentId: "rep-a", title: "checkout page renders blank", kind: "bug" });
+reportIssue(db, { workspaceId: wsB, repoPath: repoB, agentId: "rep-b", title: "guard blocked my own commit", kind: "coordination" });
+const ct = coordToolIssues(db, { excludeWorkspaceId: "some-other-ws" });
+ok(
+  "coordToolIssues finds tool-referencing + kind:coordination issues only",
+  ct.issues.some((i) => i.title.includes("post_message")) && ct.issues.some((i) => i.title.includes("own commit")) && !ct.issues.some((i) => i.title.includes("checkout")),
+);
+ok("coordToolIssues excludes the asking workspace", !coordToolIssues(db, { excludeWorkspaceId: wsA }).issues.some((i) => i.workspace_id === wsA));
+
+const homeWs = workspaceId(join(dirname(fileURLToPath(import.meta.url)), ".."));
+const homeBrief = buildRoomBrief(db, { agentId: "me", workspaceId: homeWs, repoRoot: "agent-coord" });
+ok("home-repo brief surfaces cross-repo coord issues", homeBrief.includes("about agent-coord filed from other repos") && homeBrief.includes("post_message"));
+const elsewhereBrief = buildRoomBrief(db, { agentId: "me", workspaceId: wsA, repoRoot: repoA });
+ok("non-home brief never carries the self-triage line", !elsewhereBrief.includes("about agent-coord filed from other repos"));
 
 let pass = true;
 for (const [k, v] of Object.entries(checks)) {
