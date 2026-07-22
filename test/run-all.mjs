@@ -25,7 +25,7 @@ for (const f of tests) {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
     timeout: 120_000,
-    env: { ...process.env, AGENT_COORD_HOME: home, AGENT_COORD_NOTIFY: "0" },
+    env: { ...process.env, AGENT_COORD_HOME: home, AGENT_COORD_NOTIFY: "0", AGENT_COORD_DIGEST: "0" },
   });
   // The test's pass/fail is already in `r.status`; cleanup is best-effort. On
   // Windows a just-exited child can hold the SQLite file a beat longer, so a bare

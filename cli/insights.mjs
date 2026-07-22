@@ -1,5 +1,5 @@
 import { getDb, isoAgoMs } from "../lib/store.mjs";
-import { collisionHotspots, repoMap, repoName } from "../lib/insights.mjs";
+import { collisionHotspots, repoMap, repoName, coordinationROI } from "../lib/insights.mjs";
 
 // Read-only, stdout-only retro over the timeline the system already records.
 // The analysis lives in lib/insights.mjs (shared with the digest writer, the
@@ -33,7 +33,12 @@ const conflicts = db
 
 console.log(`agent-coord insights — last ${sinceArg}  (read-only)\n`);
 
-console.log("▶ Same file, 2+ agents — review for duplicated / contradictory work:");
+const roi = coordinationROI(db, { windowMs });
+console.log("▶ What coordination did:");
+console.log(`   ${roi.fileBlocks} concurrent-edit collision${roi.fileBlocks === 1 ? "" : "s"} blocked (${roi.selfHealedBlocks} self-healed — the blocked agent got the file later, no human)`);
+console.log(`   ${roi.resourceBlocks} resource collision${roi.resourceBlocks === 1 ? "" : "s"} blocked · ${roi.dupWorkBlocks} duplicate-work stand-down${roi.dupWorkBlocks === 1 ? "" : "s"} · ${roi.yieldRequests} yield request${roi.yieldRequests === 1 ? "" : "s"} · ${roi.activeAgents} agents active`);
+
+console.log("\n▶ Same file, 2+ agents — review for duplicated / contradictory work:");
 if (!collisions.length) console.log("   none");
 for (const c of collisions.slice(0, 30)) {
   console.log(`   ${c.repo}/${c.path}  — ${c.agents.length} agents, ${c.edits} edits  [${c.agents.join(", ")}]`);

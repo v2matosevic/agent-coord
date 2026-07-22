@@ -123,7 +123,7 @@ lib/
   room-brief.mjs   buildRoomBrief() — arrival context: peers, board, decisions, unread; ALWAYS carries the identity line (solo case included) and is returned by announce_intent too (one-call check-in); in the agent-coord repo itself it also surfaces open coord-tool issues filed from OTHER repos (self-triage — the one deliberate crack in workspace scoping)
   coord-context.mjs midTurnContext() — peer messages + freed files I was blocked on + overlap advisory (PostToolUse additionalContext / UserPromptSubmit stdout)
   activity.mjs     logActivity, getFleet, queueDepth, recentActivity, getGlobalState
-  insights.mjs     shared read-only analysis — collisionHotspots (same file, 2+ agents) + pathHistory (powers query_history)
+  insights.mjs     shared read-only analysis — collisionHotspots (same file, 2+ agents) + pathHistory (powers query_history) + coordinationROI (payoff counters: blocks, self-heals, dup stand-downs — feeds insights/digest/dashboard)
   notify.mjs       native desktop notifications (macOS) — block / message / yield; throttled, detached, fail-safe
   bash-targets.mjs detectWriteTargets — files a shell command writes (sed -i / > / >> / tee / cp / mv / touch / Set-Content / Add-Content / Out-File); quote-aware tokenizer, repo-only, cwd-relative
   snapshot.mjs     atomic JSON mirror of the fleet → ~/.agent-coord/snapshot.json (written by the statusline tick + state-json); stamps generatedAt + clone root
@@ -131,7 +131,7 @@ lib/
   reaper.mjs       reap() + reapThrottled() — GC dead agents / expired leases / stale links; wal_checkpoint
   config.mjs       FILE_TTL_SEC, RESOURCE_TTL_SEC, DEAD_MS (3 min), FILE_ACTIVE_MS (5 min warm window), OVERLAP_*, NOTIFY_*, SCHEMA_VERSION
 hooks/
-  session.mjs      register (+ room brief) / prompt (mid-turn-context delivery) / subagent-start / subagent-stop / release
+  session.mjs      register (+ room brief + daily-throttled detached digest spawn) / prompt (mid-turn-context delivery) / subagent-start / subagent-stop / release
   guard.mjs        PreToolUse file claim-or-block (exit 2) + notify on block; --post = heartbeat + log + mid-turn delivery (shell calls too)
   bash-guard.mjs   PreToolUse Bash|PowerShell: resource + shell-write-target claim-or-block + committer marker
 mcp/
@@ -555,13 +555,12 @@ The compounding loop: **act → record → distill → inform → act.**
 Accumulate structured observations → periodically summarize the durable ones into
 memory the next agent reads. That is the whole mechanism; anything fancier is hype.
 
-**Build order (gated on the still-pending two-agent live test):**
-- NOW: `cli/insights.mjs`. If its output is boring, the lane stops here — cheaply.
-- LATER (only once insights proves there's signal): a `digest` that writes scoped
-  per-project memory notes (high threshold, update-not-duplicate); hotspot warnings
-  surfaced in `claim_files`; a `query_history` MCP tool; SessionStart-throttled run.
-- CUT: a model-curated "summarize my work" auto-note writer — it pollutes the
-  hand-curated vault that models the operator; and scheduling a writer before it's proven.
+**Build order — all gated steps now SHIPPED:** `cli/insights.mjs` proved signal;
+the `digest` writer, `claim_files` hotspot warnings, the `query_history` MCP tool,
+and (v1.7.0) the SessionStart-throttled auto-run + `coordinationROI` payoff
+counters (insights/digest/dashboard) are all live.
+- CUT (still): a model-curated "summarize my work" auto-note writer — it pollutes
+  the hand-curated vault that models the operator.
 
 **Privacy (hard rules — the store is single-user but mixes clients):**
 - Distill reads **only** `activity_log` — **never** `agents.current_task` (verbatim

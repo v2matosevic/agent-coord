@@ -15,17 +15,18 @@ web-dev studio, macOS + Windows).
 
 ## Recommended next 3
 
-1. **SessionStart-throttled digest auto-run** (S) — the one remaining §12 item. Run
-   `cli/digest.mjs` automatically (throttled, e.g. once/day) so the per-project
-   hotspot record stays fresh with zero ceremony. Pure win, builds on shipped code.
-2. **Dashboard "Insights" tab** (M) — surface `lib/insights.mjs` (hotspots + a
-   conflict timeline + the digests) in the existing browser dashboard, and a
-   "what it saved you" counter (conflicts prevented, dup-work blocked, cold
-   takeovers). Turns the data we already log into a visible payoff.
-3. **Live two-agent shakedown on macOS** (S–M) — the standing open item. A
+1. **Live two-agent shakedown on macOS** (S–M) — the standing open item. A
    reproducible scripted scenario (two `claude -p` agents colliding on one file +
    one duplicating a task) to tune `DEAD_MS`/TTLs from real behaviour, now that the
    Mac is the primary box.
+2. **Linux/Windows notifications** (S) — generalize `lib/notify.mjs` beyond macOS
+   (`notify-send` on Linux, PowerShell toast on Windows). The seam is already there
+   and the operator works daily on Windows.
+3. **`npx agent-coord` installer + Homebrew formula** (S–M) — one-command install
+   for anyone, not just "clone + `node setup.mjs`."
+
+_Shipped from this list (v1.7.0): SessionStart-throttled digest auto-run; the
+dashboard insights panel + "what it saved you" ROI counters (`coordinationROI`)._
 
 ## Coordination depth
 

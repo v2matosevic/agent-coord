@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { existsSync } from "node:fs";
 import { getDb, DEGRADED_FLAG } from "../lib/store.mjs";
 import { getGlobalState } from "../lib/activity.mjs";
+import { collisionHotspots, coordinationROI } from "../lib/insights.mjs";
 import { reapThrottled } from "../lib/reaper.mjs";
 import { PAGE } from "./dashboard-ui.mjs";
 
@@ -11,6 +12,13 @@ const PORT = Number(process.argv[2]) || 7777;
 const db = getDb();
 
 const server = createServer((req, res) => {
+  if (req.url.startsWith("/api/insights")) {
+    // Heavier scan than /api/state (full activity window) — the page polls it
+    // on its own slow cadence, not every tick.
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify({ roi: coordinationROI(db), hotspots: collisionHotspots(db).slice(0, 12) }));
+    return;
+  }
   if (req.url.startsWith("/api/state")) {
     reapThrottled(db);
     const state = getGlobalState(db);

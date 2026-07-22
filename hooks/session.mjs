@@ -1,5 +1,8 @@
-import { readFileSync } from "node:fs";
-import { resolveAgentId } from "../lib/identity.mjs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolveAgentId, COORD_HOME } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded } from "../lib/store.mjs";
 import { ensureAgent, markDead, heartbeat } from "../lib/agents.mjs";
@@ -67,6 +70,24 @@ try {
     try {
       const brief = buildRoomBrief(db, { agentId, workspaceId: workspaceId(repoRoot), repoRoot });
       if (brief) process.stdout.write(brief + "\n");
+    } catch {}
+    // Self-learning upkeep: regenerate the per-project hotspot/ROI digests at
+    // most once a day, spawned DETACHED so SessionStart never waits on it.
+    // Stamp the marker before spawning so two sessions starting together can't
+    // double-run. AGENT_COORD_DIGEST=0 opts out (the test runner sets it).
+    try {
+      if (process.env.AGENT_COORD_DIGEST !== "0") {
+        const mark = join(COORD_HOME, ".last-digest");
+        let due = true;
+        try {
+          due = Date.now() - statSync(mark).mtimeMs > 86400000;
+        } catch {}
+        if (due) {
+          writeFileSync(mark, String(Date.now()));
+          const digest = fileURLToPath(new URL("../cli/digest.mjs", import.meta.url));
+          spawn(process.execPath, ["--disable-warning=ExperimentalWarning", digest], { detached: true, stdio: "ignore" }).unref();
+        }
+      }
     } catch {}
   } else if (MODE === "prompt") {
     const { repoRoot, branch } = ctx();

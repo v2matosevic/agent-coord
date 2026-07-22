@@ -2,7 +2,7 @@
 // single-agent files), normalizing absolute spellings to repo-relative; and
 // pathHistory answers "who touched this" by exact file and by directory prefix.
 import { getDb, nowIso, writeTxn } from "../lib/store.mjs";
-import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
+import { collisionHotspots, pathHistory, coordinationROI } from "../lib/insights.mjs";
 
 const db = getDb();
 const ws = "testws-insights";
@@ -39,6 +39,26 @@ check(dir.eventCount >= 3, "directory prefix matches files under it");
 
 const none = pathHistory(db, { workspaceId: ws, path: "does/not/exist.js" });
 check(none.eventCount === 0, "unknown path returns no events");
+
+// coordinationROI — the payoff counters. Explicit timestamps so the
+// conflict → later-claim ordering is deterministic (nowIso can collide).
+const t = (offsetMs) => new Date(Date.now() - offsetMs).toISOString();
+writeTxn(db, () => {
+  const ins = db.prepare("INSERT INTO activity_log(ts,agent_id,workspace_id,event,detail) VALUES(?,?,?,?,?)");
+  ins.run(t(120000), "gamma-1", ws, "conflict", "src/app.js"); // blocked...
+  ins.run(t(60000), "gamma-1", ws, "claim", "src/app.js"); // ...then got it → self-healed
+  ins.run(t(90000), "delta-1", ws, "conflict", "src/other.js"); // blocked, never resolved
+  ins.run(t(80000), "gamma-1", ws, "resource-conflict", "port:3000");
+  ins.run(t(70000), "delta-1", ws, "overlap-block", "gamma-1");
+  ins.run(t(50000), "zzz-9", "otherws-roi", "conflict", "x.js"); // different room
+});
+const roi = coordinationROI(db, { workspaceId: ws });
+check(roi.fileBlocks === 2, "ROI counts file blocks in the room");
+check(roi.selfHealedBlocks === 1, "a conflict followed by the same agent's claim counts as self-healed");
+check(roi.resourceBlocks === 1 && roi.dupWorkBlocks === 1, "resource blocks and dup-work stand-downs counted");
+check(coordinationROI(db, { workspaceId: "otherws-roi" }).fileBlocks === 1, "workspace scoping holds");
+const globalRoi = coordinationROI(db);
+check(globalRoi.fileBlocks >= 3, "global ROI spans rooms");
 
 console.log(ok ? "PASS ✅" : "FAIL ❌");
 process.exit(ok ? 0 : 1);

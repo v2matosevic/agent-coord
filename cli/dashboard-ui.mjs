@@ -35,6 +35,11 @@ export const PAGE = `<!doctype html>
   .empty{color:var(--mut2);font-size:12px;font-style:italic}
   .feed{max-height:260px;overflow:auto} .feed .row .t{color:var(--mut2);font-size:11px;min-width:58px}
   .ev{color:var(--red)} .ev.release,.ev.intent{color:var(--mut2)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .stat .v{font-size:24px;font-weight:600} .stat .v.on{color:var(--red)}
+  .stat .l{color:var(--mut2);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
+  .hot .row .n{color:var(--red);font-weight:600;min-width:16px;text-align:right}
 </style></head>
 <body>
   <header><h1>agent<b>·</b>coord</h1><span class="count"><b id="n">0</b> live agents</span><span class="deg" id="deg">⚠ DEGRADED — enforcement off</span></header>
@@ -44,6 +49,8 @@ export const PAGE = `<!doctype html>
     <div class="card"><h3>Queue</h3><div id="queue"></div></div>
   </div>
   <div class="card" style="margin-top:16px"><h3>Activity</h3><div class="feed" id="feed"></div></div>
+  <div class="stats" id="stats"></div>
+  <div class="card hot" style="margin-top:16px"><h3>Multi-agent hotspots — last 7d (review for duplicated / contradictory work)</h3><div id="hot"></div></div>
 <script>
 const $=s=>document.querySelector(s);
 const base=p=>p?p.replace(/\\/+$/,'').split('/').pop():'—';
@@ -67,5 +74,19 @@ async function tick(){
   $('#feed').innerHTML=s.recent.map(e=>\`<div class="row"><span class="t">\${esc((e.ts||'').slice(11,19))}</span><span class="ev \${esc(e.event)}">\${esc(e.event)}</span><span>\${esc(e.detail||'')}</span><span class="who">\${esc(e.agent_id)}</span></div>\`).join('')||'<div class="empty">none</div>';
 }
 tick(); setInterval(tick,1500);
+// The payoff panel — heavier server-side scan, so its own slow cadence.
+async function insights(){
+  let s; try{ s=await (await fetch('/api/insights',{cache:'no-store'})).json(); }catch{ return; }
+  const r=s.roi||{};
+  const stat=(v,l,on)=>\`<div class="stat"><div class="v \${on&&v?'on':''}">\${v??0}</div><div class="l">\${l}</div></div>\`;
+  $('#stats').innerHTML=
+    stat(r.fileBlocks,'edit collisions blocked · 7d',1)+
+    stat(r.selfHealedBlocks,'self-healed, no human')+
+    stat(r.resourceBlocks,'resource collisions blocked',1)+
+    stat(r.dupWorkBlocks,'dup-work stand-downs',1)+
+    stat(r.activeAgents,'agents active');
+  $('#hot').innerHTML=(s.hotspots||[]).map(h=>\`<div class="row"><span class="n">\${h.agents.length}×</span><span class="mono">\${esc(h.repo)}/\${esc(h.path)}</span><span class="who">\${esc(h.agents.join(', '))} · \${h.edits} edits</span></div>\`).join('')||'<div class="empty">none — no file touched by 2+ agents this week</div>';
+}
+insights(); setInterval(insights,30000);
 </script>
 </body></html>`;

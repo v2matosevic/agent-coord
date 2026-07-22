@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getDb } from "../lib/store.mjs";
-import { collisionHotspots } from "../lib/insights.mjs";
+import { collisionHotspots, coordinationROI } from "../lib/insights.mjs";
 import { COORD_HOME } from "../lib/identity.mjs";
 
 // The "self-learning" step (SYSTEM.md §12, gated on insights proving signal): turn
@@ -56,6 +56,15 @@ for (const { repo, ws, items } of byRepo.values()) {
   ];
   for (const h of items) {
     lines.push(`- \`${h.path}\` — ${h.agents.length} agents, ${h.edits} edits, last ${h.last.slice(0, 16).replace("T", " ")}  _[${h.agents.join(", ")}]_`);
+  }
+  // What coordination saved this repo over the window — the visible payoff that
+  // justifies the per-call hook overhead.
+  const roi = coordinationROI(db, { windowMs, workspaceId: ws });
+  if (roi.fileBlocks || roi.resourceBlocks || roi.dupWorkBlocks) {
+    lines.push("", `## What coordination did (last ${since})`, "");
+    if (roi.fileBlocks) lines.push(`- ${roi.fileBlocks} concurrent-edit collision${roi.fileBlocks === 1 ? "" : "s"} blocked (${roi.selfHealedBlocks} self-healed without a human)`);
+    if (roi.resourceBlocks) lines.push(`- ${roi.resourceBlocks} resource collision${roi.resourceBlocks === 1 ? "" : "s"} blocked (dev server / migration / deploy)`);
+    if (roi.dupWorkBlocks) lines.push(`- ${roi.dupWorkBlocks} duplicate-work stand-down${roi.dupWorkBlocks === 1 ? "" : "s"}${roi.yieldRequests ? ` · ${roi.yieldRequests} yield request${roi.yieldRequests === 1 ? "" : "s"}` : ""}`);
   }
   lines.push("");
   writeFileSync(file, lines.join("\n"));

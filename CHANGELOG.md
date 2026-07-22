@@ -3,6 +3,38 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.7.0 — the payoff is visible: ROI counters, digest auto-run, dashboard insights
+
+The system logged every save it made and showed none of them. This release
+turns the recorded timeline into a visible "what coordination did for you" —
+the FUTURE.md "recommended next" items, now that the field-fix wave cleared
+the backlog.
+
+- **`coordinationROI()` (lib/insights.mjs)** — the payoff counters over any
+  window, from events already logged: concurrent-edit collisions blocked,
+  resource collisions blocked (dev server / migration / deploy),
+  duplicate-work stand-downs, yield requests — and **self-healed blocks**: a
+  `conflict` followed by the same agent's later `claim`/`edit` of that path
+  means the warm/cold lease resolved the block with no human involved. First
+  live read on this machine: 8 edit collisions blocked in 7d, **all 8
+  self-healed**, plus 4 resource blocks, across 33 agents.
+- **`cli/insights.mjs` leads with the ROI summary**; **`cli/digest.mjs`**
+  appends a per-repo "What coordination did" section to each project digest.
+- **Digest auto-run (SessionStart, throttled).** The per-project digests now
+  regenerate themselves at most once a day: the register hook spawns
+  `cli/digest.mjs` DETACHED (SessionStart never waits), a marker file
+  (`~/.agent-coord/.last-digest`) is stamped *before* spawning so concurrent
+  session starts can't double-run, and `AGENT_COORD_DIGEST=0` opts out (the
+  test runner sets it). The last §12 build-order item — zero-ceremony fresh
+  retros.
+- **Dashboard insights panel.** New `/api/insights` endpoint (ROI + top
+  hotspots) polled on its own 30s cadence (heavier scan than `/api/state`,
+  which stays at 1.5s); the page gains a stat strip (blocked / self-healed /
+  resource / dup-work / active agents) and a multi-agent-hotspots card with
+  per-file agent lists.
+- `test/insights.mjs` gains deterministic ROI coverage (self-heal ordering via
+  explicit timestamps, workspace scoping, cross-room global). 34 tests green.
+
 ## v1.6.2 — field-fix wave: real dev ports, own-commit recognition, self-triage
 
 Clears the rest of the issue-log backlog that pointed at the tool itself:
