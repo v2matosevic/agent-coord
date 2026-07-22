@@ -39,6 +39,12 @@ try {
   console.log("check_conflict:", JSON.stringify(await call("check_conflicts", { paths: ["src/x.ts"] })));
   console.log("claim_resource:", JSON.stringify(await call("claim_resource", { resource_id: "port:3000" })));
   console.log("post_message:  ", JSON.stringify(await call("post_message", { body: "hello from smoke" })));
+  // The field-reported binding-error class: a misnamed/omitted required arg used
+  // to surface as "Provided value cannot be bound to SQLite parameter 5" — it
+  // must now be a friendly error naming the field, never a binding error.
+  const bad = await call("post_message", { message: "wrong param name" });
+  const badArgsOk = typeof bad.error === "string" && bad.error.includes('"body"') && !bad.error.includes("cannot be bound");
+  console.log("bad-args error:", badArgsOk ? "ok (friendly, names the field)" : "BROKEN: " + JSON.stringify(bad));
   console.log("read_messages: ", JSON.stringify(await call("read_messages"))); // own message excluded -> []
   console.log("agents:        ", JSON.stringify((await call("list_active_agents")).agents.map((a) => `${a.agent_id}/${a.tool}`)));
   console.log("pending_push:  ", JSON.stringify(await call("pending_push_review")));
@@ -61,11 +67,18 @@ try {
   const expected = ["whoami", "announce_intent", "claim_files", "list_active_agents", "get_global_state", "check_conflicts", "release_files", "claim_resource", "release_resource", "log_activity", "post_message", "read_messages", "pending_push_review", "ask_agent", "check_replies", "reply", "request_yield", "list_tasks", "claim_task", "update_task", "report_issue", "list_issues", "resolve_issue"];
   const haveAll = expected.every((t) => tools.includes(t));
   console.log(
-    haveAll && issueWorks && briefOk
+    haveAll && issueWorks && briefOk && badArgsOk
       ? "PASS ✅ MCP server speaks the protocol; tools work"
-      : "FAIL ❌ " + (!haveAll ? "missing tools: " + expected.filter((t) => !tools.includes(t)) : !issueWorks ? "issue lifecycle broken" : "announce brief broken"),
+      : "FAIL ❌ " +
+          (!haveAll
+            ? "missing tools: " + expected.filter((t) => !tools.includes(t))
+            : !issueWorks
+              ? "issue lifecycle broken"
+              : !briefOk
+                ? "announce brief broken"
+                : "bad-args error not friendly"),
   );
-  failed = !haveAll || !issueWorks || !briefOk;
+  failed = !haveAll || !issueWorks || !briefOk || !badArgsOk;
 } catch (e) {
   console.log("FAIL ❌", e.message);
   failed = true;

@@ -137,6 +137,7 @@ hooks/
 mcp/
   server.mjs       stdio MCP server (28 tools); one process = one agent
   tool-defs.mjs    JSON-Schema tool catalog
+  args.mjs         normalizeArgs() — schema-driven coercion/validation of model-supplied args BEFORE any SQL bind (node:sqlite rejects undefined/boolean/object; a misnamed required field now fails with an error naming the field + received keys, not "cannot be bound to parameter N")
 cli/
   statusline.mjs   Claude status line — leads with THIS terminal's own id + its subagents, then the fleet (⚠ CONTENDED / DEGRADED); also rewrites snapshot.json each tick
   status.mjs       one-shot fleet table        watch.mjs   terminal live view
@@ -153,7 +154,7 @@ vscode-extension/  Activity Bar "Fleet" webview — icon → live panel + open-i
                    falls back to system node + state-json.mjs only when the snapshot is stale
 git/pre-commit     reference copy of the hook
 setup.{mjs,ps1}    idempotent cross-platform installer (setup.mjs adds the macOS menu-bar plugin on darwin)
-test/              33 files — locks/board/messaging(+sender-liveness+capped-batch)/global-state-cap/overlap/identity(+anchor-resolution)/names/search/issues/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
+test/              34 files — locks/board/messaging(+sender-liveness+capped-batch)/global-state-cap/overlap/identity(+anchor-resolution)/names/search/issues/cooperation/shell-writes(+deploy-scope)/insights/prepush-guard (+ helpers)
 tier0/             original presence-only layer (superseded, kept for reference)
 ```
 
@@ -255,7 +256,9 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-33 tests (run isolated via `AGENT_COORD_HOME`): `identity-names` (claimed
+34 tests (run isolated via `AGENT_COORD_HOME`): `mcp-args` (the arg-normalization
+boundary: field-reported missing/misnamed required fields fail friendly, every
+coercion SQL-bindable), `identity-names` (claimed
 single-word names: stability, 50-session uniqueness, pool exhaustion, stale
 recycle), `search` (FTS5: backfill, trigger sync, scoping, kind filter,
 punctuation-proof queries, delete cleanup), `issues` (cross-project log: report/

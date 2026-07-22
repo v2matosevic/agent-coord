@@ -3,6 +3,39 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.6.1 — MCP arg validation (kills the field-reported binding-error class)
+
+The issue log's own backlog pointed at the system: "post_message fails —
+Provided value cannot be bound to SQLite parameter 5" was reported **five
+times by five agents across three projects** over three weeks (plus the same
+class in `log_activity` and `claim_resource`). Root cause: the MCP server
+passed model-supplied arguments straight into SQL, and `node:sqlite` binds
+only null/string/number/bigint — a required field the model omitted or
+misnamed (tool schemas are deferred client-side by default, so nothing
+validates the call), or a value sent as a boolean/object/array, surfaced as
+that cryptic binding error with no way for the model to self-correct.
+
+- **`mcp/args.mjs` — one normalization boundary for all 28 tools**, driven by
+  the same `inputSchema` each tool already declares in `tool-defs.mjs` (no
+  hand-written per-tool spec to drift). Values with one obvious meaning are
+  coerced (`42` → `"42"`, `["a","b"]` → `"a\nb"` for a string field, `"x"` →
+  `["x"]` for an array field, objects → JSON); uncoercible optionals are
+  dropped; a missing required field fails with an error that names the field
+  AND the keys actually received (`post_message: missing required argument
+  "body" (string). Unrecognized keys ignored: message — check the parameter
+  names and retry.`) — so the calling model fixes its own call next try.
+- **`whoami` now reports the server's code `version`** (read from
+  package.json at spawn). A long-running server executes whatever was on disk
+  when the session started, so fixes ship "invisibly" until restart — the
+  stamp makes a stale server diagnosable instead of confusing. The MCP
+  `Server` version string is synced to the same source (was hard-coded and
+  had drifted to 1.5.1).
+- `+ test/mcp-args.mjs` (14 checks: the exact field failures + every coercion)
+  and an end-to-end bad-args probe in `test/mcp-smoke.mjs` (misnamed `body`
+  over a real MCP client must produce the friendly error, never a binding
+  error). 34 tests. **Live sessions keep the old server until they restart** —
+  the reports will stop as sessions naturally recycle.
+
 ## v1.6.0 — hot-path diet (hooks ~2x faster)
 
 The hooks run on EVERY tool call of every agent on the machine. Measured on

@@ -23,6 +23,8 @@ import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
 import { searchRecords } from "../lib/search.mjs";
 import { reportIssue, listIssues, updateIssue, projectLabel, normSeverity } from "../lib/issues.mjs";
 import { TOOL_DEFS } from "./tool-defs.mjs";
+import { normalizeArgs } from "./args.mjs";
+import { readFileSync } from "node:fs";
 
 // One stdio MCP server == one agent (clients spawn it per session). This is how
 // non-Claude agents (Codex, etc.) get coordination: awareness + model-invoked
@@ -32,6 +34,18 @@ const argFlag = (f) => {
   const i = process.argv.indexOf(f);
   return i >= 0 ? process.argv[i + 1] : null;
 };
+
+// Synced to package.json so whoami can expose which code a long-running server
+// is actually executing — the server runs whatever was on disk at spawn time,
+// so a fix ships "invisibly" until sessions restart; the stamp makes stale
+// servers diagnosable instead of confusing.
+const VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  } catch {
+    return "0.0.0";
+  }
+})();
 
 const tool = argFlag("--tool") || "mcp-agent";
 const cwd = process.cwd();
@@ -90,7 +104,7 @@ const canon = (p) => canonicalFilePath(p, repoRoot);
 function handle(name, a) {
   switch (name) {
     case "whoami": {
-      const me = { agentId, tool, repo: repoRoot, branch, workspace: ws };
+      const me = { agentId, tool, repo: repoRoot, branch, workspace: ws, version: VERSION };
       // Self-check (BUG 1 defense-in-depth): a claude-code server that never adopted
       // a hook link is the exact signature of the ghost-twin split — the hooks are
       // recording this session's file leases and commits under a DIFFERENT id than
@@ -337,7 +351,7 @@ const INSTRUCTIONS =
   "File locks self-heal: a blocked file auto-frees minutes after its holder moves on — edit elsewhere " +
   "and retry or post_message the holder; never ask the human to unlock, never force-release a live peer.";
 
-const server = new Server({ name: "agent-coord", version: "1.5.1" }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+const server = new Server({ name: "agent-coord", version: VERSION }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;
@@ -354,7 +368,11 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
   heartbeat(db, agentId);
   try {
-    return ok(handle(name, a));
+    // Normalize model-supplied args against the tool's declared schema BEFORE
+    // they can reach a SQL bind (see mcp/args.mjs — kills the field-reported
+    // "Provided value cannot be bound to SQLite parameter N" class).
+    const def = TOOL_DEFS.find((d) => d.name === name);
+    return ok(handle(name, def ? normalizeArgs(def, a) : a));
   } catch (e) {
     return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true };
   }
