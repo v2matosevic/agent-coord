@@ -3,6 +3,55 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.7.1 — the hook was shouting into a temp file
+
+A field report (`i-77824feb`, from a MeloraFinal session) caught the worst class
+of bug this system can have: coordination that looks like it works and isn't.
+
+Claude Code persists any hook's stdout over **8192 bytes** to a temp file and
+shows the model only the first 2000 characters (`length>8192`, `Y5=2000`,
+verified in the 2.1.245 bundle). The hook is not told. Nothing exits non-zero.
+And mid-turn delivery *consumes*: it advances `message_reads.last_seq` to the
+last message it hands back. So every peer message past that preview was marked
+read and destroyed — for every agent, silently. One session measured seven
+payloads of 12–28 KB, all truncated. `MSG_DELIVER_MAX` never bounded this: it
+caps message COUNT, and fifteen ordinary messages are 12–30 KB.
+
+- **A byte budget, measured on the payload the hook actually writes.**
+  `HOOK_CONTEXT_BUDGET` (7600, under the cliff so it can be lowered without this
+  going silent again). `postToolContextJson` escapes every newline, so measuring
+  the bare string under-counts precisely the payloads nearest the limit — hooks
+  now call `postToolContext()` or pass `wrap`, making the thing budgeted and the
+  thing written the same bytes by construction.
+- **Bodies are shortened; the list is not.** Widths are tried widest-first
+  (`MSG_BODY_WIDTHS`), and only if the narrowest still overflows are whole
+  messages withheld. A sender line plus a first line is what lets an agent decide
+  to call `read_messages`, so keeping every sender beats keeping a few whole
+  bodies.
+- **Peek, fit, then ack.** `peekUnread` + `ackMessages` replace read-and-consume
+  for hook delivery: the watermark advances no further than the last message
+  before the first one withheld. Nothing undelivered is ever marked read.
+- **Directed before broadcast, then newest-first.** `MSG_DIRECTED_LOOKAHEAD`
+  pulls a directed message forward past the delivery window — delivered but
+  deliberately *not* acked, so it may repeat until the backlog behind it drains.
+  Repeating a yield request is cheap; losing one is not.
+- **It says what it cut, and distinguishes the two cuts honestly.** Withheld
+  messages are still unread and `read_messages` really does pull them whole;
+  shortened ones have been consumed and only `search` finds them again. Claiming
+  otherwise would be a fresh lie in the exact place a silent one just cost a day
+  of peer messages.
+- `buildRoomBrief` takes the same budget (`clampLines` backstop: the identity
+  line always survives, and a trim announces itself).
+- New `test/hook-budget.mjs`: a 20×4 KB backlog with every hook write measured
+  post-JSON, the cut named in the delivered text, withheld messages still unread
+  and arriving next event, a directed message jumping 15 broadcasts, the backlog
+  draining to zero, an empty inbox staying silent. It reported **62051 bytes**
+  against the old code. 35 tests green; the empty-mailbox hot path is unchanged
+  (0.29 ms/event).
+
+**Upgrading:** live sessions and MCP servers run the pre-fix hooks until they
+restart — the loss window closes on restart, not on pull.
+
 ## v1.7.0 — the payoff is visible: ROI counters, digest auto-run, dashboard insights
 
 The system logged every save it made and showed none of them. This release
