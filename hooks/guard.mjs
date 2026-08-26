@@ -7,7 +7,7 @@ import { claimFile, enqueue } from "../lib/leases.mjs";
 import { logActivity } from "../lib/activity.mjs";
 import { workspaceId, canonicalFilePath, isRepoRelative } from "../lib/path-canon.mjs";
 import { FILE_ACTIVE_MS } from "../lib/config.mjs";
-import { midTurnContext, postToolContextJson } from "../lib/coord-context.mjs";
+import { postToolContext } from "../lib/coord-context.mjs";
 import { overlapHardBlock, earlierOverlappingPeers } from "../lib/overlap.mjs";
 import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
@@ -56,8 +56,12 @@ try {
     // Mid-turn delivery: surface peer messages, freed files we were blocked on,
     // + duplicate-work advisory between tool calls. Non-blocking.
     try {
-      const ctx = midTurnContext(db, { agentId, workspaceId: ws });
-      if (ctx) process.stdout.write(postToolContextJson(ctx, failed ? "PostToolUseFailure" : "PostToolUse"));
+      // postToolContext, not midTurnContext + wrap by hand: the payload has to be
+      // budgeted against the bytes this write actually puts on the wire (the JSON
+      // wrapper escapes every newline), or the ones nearest the 8192 cliff are
+      // exactly the ones that get under-measured and filed away.
+      const out = postToolContext(db, { agentId, workspaceId: ws, eventName: failed ? "PostToolUseFailure" : "PostToolUse" });
+      if (out) process.stdout.write(out);
     } catch {}
     process.exit(0);
   }

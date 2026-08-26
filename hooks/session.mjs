@@ -68,7 +68,7 @@ try {
     // Room brief: SessionStart stdout lands in context, so the agent arrives
     // knowing who's here, the board, and standing decisions — no tool calls.
     try {
-      const brief = buildRoomBrief(db, { agentId, workspaceId: workspaceId(repoRoot), repoRoot });
+      const brief = buildRoomBrief(db, { agentId, workspaceId: workspaceId(repoRoot), repoRoot, wrap: (s) => s + "\n" });
       if (brief) process.stdout.write(brief + "\n");
     } catch {}
     // Self-learning upkeep: regenerate the per-project hotspot/ROI digests at
@@ -100,8 +100,9 @@ try {
     if (task && !boilerplate) heartbeat(db, agentId, task);
     else heartbeat(db, agentId);
     // Same delivery as mid-turn (messages + freed files + overlap advisory) —
-    // UserPromptSubmit stdout is injected into context.
-    const ctxText = midTurnContext(db, { agentId, workspaceId: workspaceId(repoRoot) });
+    // UserPromptSubmit stdout is injected into context. `wrap` accounts for the
+    // trailing newline this hook writes, so the budget matches the real payload.
+    const ctxText = midTurnContext(db, { agentId, workspaceId: workspaceId(repoRoot), wrap: (s) => s + "\n" });
     if (ctxText) process.stdout.write(ctxText + "\n");
   } else if (MODE === "sub-start") {
     const { repoRoot, branch } = ctx();

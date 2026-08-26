@@ -256,7 +256,11 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-34 tests (run isolated via `AGENT_COORD_HOME`): `mcp-args` (the arg-normalization
+35 tests (run isolated via `AGENT_COORD_HOME`): `hook-budget` (the 8192-byte
+cliff: 20x4 KB backlog, every hook write measured post-JSON, the cut named in the
+delivered text, withheld messages still unread and arriving next event, a directed
+message jumping 15 broadcasts, backlog drains to zero, empty inbox silent, room
+brief clamped), `mcp-args` (the arg-normalization
 boundary: field-reported missing/misnamed required fields fail friendly, every
 coercion SQL-bindable), `identity-names` (claimed
 single-word names: stability, 50-session uniqueness, pool exhaustion, stale
@@ -425,6 +429,38 @@ Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` =
   issues filed from other repos surface in the agent-coord repo's own room brief
   (`coordToolIssues`), closing the loop that let 5 duplicate reports of one bug sit
   unread for three weeks.
+- **Hook stdout is byte-budgeted, and delivery no longer consumes what it can't
+  show (v1.7.1, issue `i-77824feb`).** Claude Code persists any hook's stdout over
+  **8192 bytes** to a temp file and shows the model only the first 2000 characters
+  (`length>8192`, `Y5=2000`, verified in the 2.1.245 bundle). The hook is not told;
+  nothing exits non-zero. Mid-turn delivery ALSO advances `message_reads.last_seq`
+  to the last message it hands back, so **delivery consumed messages the model
+  never saw** — one field session measured seven payloads of 12–28 KB, every one
+  of them truncated, every message past the preview marked read and gone for good.
+  `MSG_DELIVER_MAX` never bounded this: it caps message COUNT, and fifteen ordinary
+  messages are 12–30 KB. Four changes:
+  (1) **A byte budget (`HOOK_CONTEXT_BUDGET`, 7600) measured on the exact payload
+  the hook writes** — `postToolContextJson` escapes every newline, so the wire size
+  exceeds `string.length` and measuring the bare string under-counts precisely the
+  payloads nearest the cliff. Hooks call `postToolContext()` / pass `wrap`, so the
+  thing budgeted and the thing written are the same bytes by construction.
+  (2) **Bodies are shortened, the list is not.** Widths are tried widest-first
+  (`MSG_BODY_WIDTHS`); only if the narrowest still overflows are whole messages
+  withheld. A sender line plus a first line is what lets an agent decide to call
+  `read_messages` — keeping all the senders beats keeping a few whole bodies.
+  (3) **Peek, fit, then ack** (`peekUnread` + `ackMessages` replace the old
+  read-and-consume for hook delivery). The watermark advances no further than the
+  last message before the first one withheld, so nothing undelivered is ever marked
+  read. A directed message pulled forward past the window (`MSG_DIRECTED_LOOKAHEAD`)
+  is delivered but deliberately NOT acked — repeating a yield request is cheap,
+  losing one is not.
+  (4) **Priority under pressure, and it says what it cut.** Directed before
+  broadcast, then newest-first. The notice distinguishes the two cuts honestly:
+  withheld messages are still unread and `read_messages` really does pull them
+  whole; shortened ones have been consumed and only `search` finds them again.
+  Claiming otherwise would be a fresh lie in the exact place a silent one just cost
+  a day of peer messages. `buildRoomBrief` takes the same budget (backstop:
+  `clampLines`, identity line always survives, a trim announces itself).
 - **Context-budget diet + one-call check-in (v1.5.0).** The coordination layer
   writes INTO model context (hook stdout, MCP results), so its own chattiness is
   a token cost multiplied across the fleet. Three changes, all additive:
@@ -442,7 +478,9 @@ Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` =
   and mid-turn delivery (MSG_DELIVER_MAX 15/event) cap what one turn ingests,
   but the read pointer advances only past what was RETURNED, so a big backlog
   drains across calls with nothing skipped or redelivered, and every truncation
-  says so (`remaining` + note). `get_global_state` caps its lists at
+  says so (`remaining` + note). (For hook delivery this only became TRUE in
+  v1.7.1 above: a count cap bounds messages, not bytes, and the bytes were what
+  Claude Code silently discarded.) `get_global_state` caps its lists at
   STATE_LIST_MAX (50) newest rows with an explicit `note` when it clips —
   a truncated dump must never read as "that was everything".
 
