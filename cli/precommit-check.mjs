@@ -5,7 +5,7 @@ import { DEAD_MS, FILE_ACTIVE_MS } from "../lib/config.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { readCommitterMarker } from "../lib/committer.mjs";
 import { sessionAnchorPids, readSessionLinkAny } from "../lib/session-link.mjs";
-import { baseAgentId } from "../lib/identity.mjs";
+import { baseAgentId, agentIdFromEnv } from "../lib/identity.mjs";
 
 // This script's own sibling — so the hint below points at the real release.mjs
 // wherever the project lives, not a hardcoded path.
@@ -59,7 +59,13 @@ try {
     try {
       linked = readSessionLinkAny(sessionAnchorPids());
     } catch {}
-    const selfBases = new Set([self, linked].filter((x) => x && x !== "__none__").map(baseAgentId));
+    // Cheapest and exact: the session id Claude exported to the process that ran
+    // `git commit` (see cli/log-commit.mjs).
+    let fromEnv = null;
+    try {
+      fromEnv = agentIdFromEnv();
+    } catch {}
+    const selfBases = new Set([self, linked, fromEnv].filter((x) => x && x !== "__none__").map(baseAgentId));
     conflicts = conflicts.filter((c) => !selfBases.has(baseAgentId(c.agent_id)));
   }
 

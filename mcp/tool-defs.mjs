@@ -61,7 +61,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "release_resource",
-    description: "Release a machine-wide resource lease.",
+    description: "Release a resource lease YOU hold. Returns released:false + heldBy when the lease is a peer's (it frees when they release or go silent) — never treat that as released.",
     inputSchema: { type: "object", properties: { resource_id: { type: "string" } }, required: ["resource_id"] },
   },
   {
@@ -71,8 +71,8 @@ export const TOOL_DEFS = [
   },
   {
     name: "pending_push_review",
-    description: "BEFORE pushing, review unpushed commits you may not have made: who authored each, whether that agent is still live, and what's safe vs. needs a peer or the human. Use this INSTEAD of asking the human 'should I push these other commits?'.",
-    inputSchema: { type: "object", properties: {} },
+    description: "BEFORE pushing, review unpushed commits you may not have made: who authored each, whether that agent is still live, and what's safe vs. needs a peer or the human. Use this INSTEAD of asking the human 'should I push these other commits?'. Every result names the repo/branch/upstream it inspected — pass `repo` (any path inside the checkout) when you're working in a NESTED repo, otherwise it answers about this server's cwd.",
+    inputSchema: { type: "object", properties: { repo: { type: "string", description: "path inside the git repo to review (default: this session's repo)" } } },
   },
   {
     name: "ask_agent",

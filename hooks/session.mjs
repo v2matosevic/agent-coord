@@ -1,8 +1,11 @@
 import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { DEAD_MS } from "../lib/config.mjs";
+import { stripHarnessPreamble } from "../lib/overlap.mjs";
+import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveAgentId, COORD_HOME } from "../lib/identity.mjs";
+import { resolveAgentId, bindSessionName, COORD_HOME } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded } from "../lib/store.mjs";
 import { ensureAgent, markDead, heartbeat } from "../lib/agents.mjs";
@@ -13,7 +16,7 @@ import { buildRoomBrief } from "../lib/room-brief.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { findClaudePid } from "../lib/proc-ancestry.mjs";
-import { writeSessionLink, cachedClaudePid, parentBaseFromProc } from "../lib/session-link.mjs";
+import { writeSessionLink, cachedClaudePid, parentBaseFromProc, readSessionLinkMeta } from "../lib/session-link.mjs";
 
 // Lifecycle hook. Modes:
 //   --register        SessionStart      -> register parent agent
@@ -45,7 +48,32 @@ const input = readInput();
 // claude.exe session-link) so a subagent shares its parent's identity even when
 // Claude hands it a different session_id. Parent events resolve normally.
 const parentBase = input?.agent_id ? parentBaseFromProc(process.ppid) : null;
-const agentId = resolveAgentId(input, { parentBase }); // parent for session events; distinct id for subagent events
+
+// One window, one name. /clear (and an in-TUI /resume) hands the SAME claude
+// process a NEW session_id, which would hash to a new name — the human's
+// statusline flips mid-conversation, the still-running MCP server keeps the old
+// one, and peers see "toad" go dead while "ferret" appears. If the claude
+// process we're under already published a link whose agent is still live, that
+// name is this window's: bind the new session id to it. Only a link under OUR
+// OWN ancestor process qualifies, so no session can inherit a peer's name; a
+// dead holder (no fresh heartbeat marker) is not retained, so a recycled pid
+// can't resurrect an exited agent's identity.
+let claudePidNow = null;
+let retained = null;
+if (MODE === "register" && !input?.agent_id && input?.session_id && input?.source && input.source !== "startup") {
+  try {
+    claudePidNow = findClaudePid(process.ppid);
+    const prev = readSessionLinkMeta(claudePidNow);
+    if (prev?.agentId && !prev.agentId.includes("/")) {
+      let liveMarker = false;
+      try {
+        liveMarker = Date.now() - statSync(join(COORD_HOME, "hb", encodeURIComponent(prev.agentId))).mtimeMs < DEAD_MS;
+      } catch {}
+      if (liveMarker && bindSessionName(input.session_id, prev.agentId)) retained = prev.agentId;
+    }
+  } catch {}
+}
+const agentId = retained || resolveAgentId(input, { parentBase }); // parent for session events; distinct id for subagent events
 
 try {
   const db = getDb();
@@ -62,9 +90,10 @@ try {
     // session's new MCP server (parented by the new pid) finds no link and stays a
     // standalone twin. Re-resolving costs one process-walk per SessionStart (rare).
     try {
-      const pids = new Set([cachedClaudePid(input.session_id), findClaudePid(process.ppid)].filter(Boolean));
+      const pids = new Set([Number(process.env.CLAUDE_PID) || null, cachedClaudePid(input.session_id), claudePidNow || findClaudePid(process.ppid)].filter(Boolean));
       for (const pid of pids) writeSessionLink(pid, agentId, input.session_id);
     } catch {}
+    if (retained) logActivity(db, { agentId, workspaceId: workspaceId(repoRoot), event: "identity-retain", detail: input.source });
     // Room brief: SessionStart stdout lands in context, so the agent arrives
     // knowing who's here, the board, and standing decisions — no tool calls.
     try {
@@ -92,13 +121,19 @@ try {
   } else if (MODE === "prompt") {
     const { repoRoot, branch } = ctx();
     ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
-    const task = typeof input.prompt === "string" ? input.prompt.replace(/\s+/g, " ").trim().slice(0, 100) : null;
+    // A host harness may prefix the prompt with context that is not the task
+    // (Hephaestus: "[Hephaestus] Local time: … Treat this as the current moment;
+    // it is host context…"). Recorded verbatim, that preamble was every ADE
+    // session's current_task and Jaccard-matched every other ADE session in the
+    // repo (i-d0793813, i-be3653b1). Strip it before the prompt becomes a task.
+    const task = typeof input.prompt === "string" ? stripHarnessPreamble(input.prompt).replace(/\s+/g, " ").trim().slice(0, 100) : null;
     // Resume boilerplate isn't a task — a relaunched session's synthetic
     // "Continue where you left off" would otherwise become its current_task and
     // Jaccard-match every other generic prompt (the gilt-hawk false positive).
     const boilerplate = task && /^continue where you left off/i.test(task);
     if (task && !boilerplate) heartbeat(db, agentId, task);
     else heartbeat(db, agentId);
+    writeSnapshotThrottled(db);
     // Same delivery as mid-turn (messages + freed files + overlap advisory) —
     // UserPromptSubmit stdout is injected into context. `wrap` accounts for the
     // trailing newline this hook writes, so the budget matches the real payload.

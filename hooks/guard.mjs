@@ -11,6 +11,7 @@ import { postToolContext } from "../lib/coord-context.mjs";
 import { overlapHardBlock, earlierOverlappingPeers } from "../lib/overlap.mjs";
 import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
+import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 
 // PreToolUse (default) on Write|Edit|MultiEdit|NotebookEdit: claim the file, or
 // exit 2 to block when another live agent holds it. PostToolUse (--post): just
@@ -53,6 +54,7 @@ try {
     // reachable), but a failed tool didn't edit anything — don't log one.
     const failed = input.hook_event_name === "PostToolUseFailure";
     if (fp && !failed) logActivity(db, { agentId, workspaceId: ws, event: "edit", detail: canonicalFilePath(fp, repoRoot) });
+    writeSnapshotThrottled(db); // keeps ~/.agent-coord/snapshot.json live for sessions with no statusline (ADE tiles)
     // Mid-turn delivery: surface peer messages, freed files we were blocked on,
     // + duplicate-work advisory between tool calls. Non-blocking.
     try {

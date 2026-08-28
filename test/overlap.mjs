@@ -4,6 +4,8 @@ import { getDb, writeTxn } from "../lib/store.mjs";
 import { ensureAgent, heartbeat } from "../lib/agents.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import {
+  stripHarnessPreamble,
+  taskTokens,
   taskSimilarity,
   findOverlappingPeers,
   earlierOverlappingPeers,
@@ -59,7 +61,20 @@ const countAfterOne = overlapAdvisoryCount(LATE);
 clean();
 ids.forEach(clearOverlapNotice);
 
+// Hephaestus prefixes every prompt with host context; two ADE sessions on
+// unrelated work must not read as duplicates because they share that prefix
+// (i-d0793813, i-be3653b1) — and a preamble-only task carries no signal.
+const PRE = "[Hephaestus] Local time: 2026-08-26 20:47:54 +02:00 (Wednesday). Treat this as the current moment;   it is host context, not part of the user's message. ";
+const preA = PRE + "fix the upload route validation";
+const preB = PRE + "write blog drafts for the launch";
+const preOnly = "[Hephaestus] Local time: 2026-08-26 20:47:54 +02:00 (Wednesday). Treat this as t"; // the 100-char truncated stored form
+
 const checks = {
+  "preamble stripped, task kept": stripHarnessPreamble(preA) === "fix the upload route validation",
+  "preamble-only task has no tokens": taskTokens(preOnly).size === 0,
+  "two preambled unrelated tasks don't overlap": taskSimilarity(preA, preB) < 0.2,
+  "two preamble-only tasks don't overlap": taskSimilarity(preOnly, preOnly) === 0,
+  "plain text untouched": stripHarnessPreamble(PROMPT) === PROMPT,
   "same-prompt similarity is high": simSame > 0.9,
   "different-topic similarity is low": simDiff < 0.5,
   "LATE sees EARLY as overlapping": lateOverlaps.some((p) => p.agentId === EARLY),

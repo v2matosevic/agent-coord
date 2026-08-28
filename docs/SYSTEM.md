@@ -109,9 +109,10 @@ One stdio server process == one agent (clients spawn it per session).
 ```
 lib/
   store.mjs        node:sqlite open/init, WAL+busy_timeout, writeTxn(IMMEDIATE)+retry, degraded flag
-  identity.mjs     agentIdFromSession() + resolveAgentId() (subagent-aware) + COORD_HOME (env-overridable)
+  identity.mjs     agentIdFromSession() + resolveAgentId() (subagent-aware) + agentIdFromEnv()/isClaudeChild() (the CLAUDE_CODE_SESSION_ID anchor) + bindSessionName() (one window keeps its name across /clear) + COORD_HOME (env-overridable)
   proc-ancestry.mjs findClaudePid() — walk the process tree to the shared claude.exe (cross-platform)
-  session-link.mjs claude.exe→agentId handshake so the MCP server adopts the hook identity (no ghost twin); sessionAnchorPids() is the canonical "which pids to resolve identity under" helper (the identity invariant — never the raw ppid)
+  session-link.mjs claude.exe→agentId handshake (the FALLBACK identity bridge when no env session id is present); sessionAnchorPids() is the canonical "which pids to resolve identity under" helper (CLAUDE_PID env, then the walked-up claude.exe, never the raw ppid alone); readSessionLinkMeta() exposes the link's write time so a running server can follow a /clear rename
+  server-identity.mjs reconcileServerIdentity() (late adoption of a hook link) + followSessionLink() (adopt a link written AFTER the server started — the session renamed itself)
   path-canon.mjs   canonicalRepoRoot/workspaceId (room key) + canonicalFilePath (alias-collapsing)
   git-context.mjs  repo root + branch for a cwd — pure-fs (.git walk + HEAD parse, realpathed root; worktree/submodule gitdir pointers handled), subprocess fallback for anything unparseable
   agents.mjs       ensureAgent (upsert+heartbeat), heartbeat (bare calls throttled via a local marker file, HB_THROTTLE_MS << DEAD_MS), markDead (clears marker), agentAlive
@@ -256,7 +257,16 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 
 ## 8. Tests & health
 
-35 tests (run isolated via `AGENT_COORD_HOME`): `hook-budget` (the 8192-byte
+39 tests (run isolated via `AGENT_COORD_HOME`, with the live session's
+`CLAUDE_CODE_SESSION_ID`/`CLAUDECODE`/`CLAUDE_PID` scrubbed so a run inside a
+Claude session can't pass by accident): `identity-env` (the env anchor: a server
+spawned WITHOUT `--tool` under Claude's env resolves the hook's exact name with no
+link, a stale link never renames it, a newer link does — the /clear follow — and
+a scrubbed env stays a standalone mcp-agent; `bindSessionName` retention),
+`commit-attribution` (post-commit: env → marker → manual, env beats a peer's warm
+marker), `release-resource` (released:false + heldBy for a peer's lease, peer's
+lease untouched), `snapshot-throttle` (missing/stale → written, fresh → skipped),
+`hook-budget` (the 8192-byte
 cliff: 20x4 KB backlog, every hook write measured post-JSON, the cut named in the
 delivered text, withheld messages still unread and arriving next event, a directed
 message jumping 15 broadcasts, backlog drains to zero, empty inbox silent, room
@@ -288,14 +298,17 @@ dry-run — no real banners), `insights` (collision hotspots + path history),
 `resource-keyword` (structure-aware: quoted text + bare-word "deploy" observers
 ignored, real deploy actions caught, deploy keyed per-workspace), `precommit`
 (cross-agent vs self),
-`pending-push`, `mcp-smoke` (real MCP client, incl. announce returning the room
+`pending-push` (verdicts + own-commit recognition via link AND env session id +
+every result names repo/branch/upstream/range, a NESTED checkout resolves to
+itself, a non-repo says so), `mcp-smoke` (real MCP client, incl. announce returning the room
 brief), `liveness` (dead-holder + reap),
 `git-switch` (room invariant), `schema-guard`, `subagent` (distinct ids + sibling
 lock), `messages` (workspace-scoped, directed, read-once, no self-delivery, +
 `from_live` sender-liveness incl. base-fallback, + capped batch reads that drain
 losslessly in order),
 `overlap` + `overlap-flow` (duplicate-work detection, tiebreaker, advisory→escalate
-→clear), `session-link` (claude.exe handshake: a `--tool claude-code` MCP server
+→clear + the Hephaestus preamble is stripped from tasks: preamble-only carries no
+signal, two preambled unrelated tasks don't overlap), `session-link` (claude.exe handshake: a `--tool claude-code` MCP server
 adopts the published id end-to-end via the anchor resolver — even behind a wrapper —
 Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` = 9/9.
 
@@ -351,6 +364,39 @@ Codex stays standalone, and an unlinked claude server warns). `cli/doctor.mjs` =
   silent. Regression coverage: `test/session-link.mjs` (anchor resolution +
   multi-candidate + the unlinked-warns self-check) and `test/server-identity.mjs`
   (the `ppids` candidate set).
+
+  **The env anchor (v1.8.0) — why the split kept coming back anyway.** Every one
+  of the Claude-only paths above was gated on `--tool claude-code`, the flag the
+  installer writes into `~/.claude.json`. A client that builds its OWN MCP config
+  (Hephaestus/ADE materializes a per-tile profile) spawned the server without it,
+  so the server never looked for a link at all: it registered as an unlinked
+  `mcp-agent` beside the session's hook identity, `whoami` said one name while
+  the hooks recorded leases and commits under another, `announce_intent` wrote
+  intent to a row the pre-edit guard never read, and `pending_push_review`
+  attributed the session's own commits to its "peer" (i-647f5cc1, i-71ffc7b0,
+  i-a7a120fb, i-d0793813, i-4e28f13d ×7). Measured: `whoami` from a server
+  spawned the Hephaestus way returned `penguin`/`mcp-agent` while the hooks knew
+  the session as `hawk`. The fix removes the flag from the decision entirely:
+  Claude Code exports `CLAUDECODE=1` and `CLAUDE_CODE_SESSION_ID` into the
+  environment of every child it spawns — hooks, the shell tool, git and its
+  hooks, each stdio MCP server (verified by reading a live server's environment).
+  `agentIdFromEnv()` hashes that id through the same claim store the hooks use,
+  so every process of a session names it identically with no race, no process
+  walk, and no dependence on an ancestor being called "claude" (an npm-installed
+  Claude runs as plain `node`, which is why the walk was never going to work on
+  every Mac). Order of resolution in the server: env → session-link poll →
+  standalone; `whoami.identityBasis` says which. The link is still needed for
+  one thing: `/clear` gives the same window a new session id, so the SessionStart
+  hook re-publishes the link and a running server follows a link that is NEWER
+  than itself (`followSessionLink`; an older link is the pid-reuse case and is
+  ignored). And rather than let that rename happen, the hook *retains* the
+  window's name across `/clear`/`/resume` when the link under its own claude
+  process still has a live heartbeat marker (`bindSessionName`) — one window,
+  one name, for the life of the process. Commit provenance uses the same anchor:
+  `cli/log-commit.mjs` resolves env → committer marker → link → `manual`, so a
+  chained `npm test && git commit` that outlived the 30s marker no longer lands as
+  "manual", and `pending_push_review` treats the env-derived id as its own.
+  Regression coverage: `test/identity-env.mjs`, `test/commit-attribution.mjs`.
 - **Talk reaches heads-down agents (mid-turn delivery).** Messages were injected
   only at `UserPromptSubmit`, so an agent building a whole feature in one long
   turn never saw a peer's messages until it finished (the coral-mole standoff).

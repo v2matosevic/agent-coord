@@ -2,7 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
-import { agentIdFromSession } from "../lib/identity.mjs";
+import { agentIdFromSession, agentIdFromEnv, isClaudeChild, sessionIdFromEnv } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb } from "../lib/store.mjs";
 import { ensureAgent, heartbeat, setIntent, markDead } from "../lib/agents.mjs";
@@ -15,7 +15,8 @@ import { analyzePendingPush } from "../lib/pending-push.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { pollSessionLinkAny, sessionAnchorPids } from "../lib/session-link.mjs";
-import { reconcileServerIdentity } from "../lib/server-identity.mjs";
+import { reconcileServerIdentity, followSessionLink } from "../lib/server-identity.mjs";
+import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { findOverlappingPeers, clearOverlapNotice } from "../lib/overlap.mjs";
 import { createTask, claimTask, claimNextTask, updateTask, listTasks } from "../lib/tasks.mjs";
 import { recordDecision, listDecisions } from "../lib/decisions.mjs";
@@ -47,7 +48,15 @@ const VERSION = (() => {
   }
 })();
 
-const tool = argFlag("--tool") || "mcp-agent";
+// Which client spawned us. `--tool claude-code` is what the installer wires into
+// ~/.claude.json, but a client that builds its own MCP config (Hephaestus/ADE
+// writes a per-tile profile) spawns us WITHOUT it — and every Claude-only path
+// below (link adoption, hook-identity sharing) used to key off the flag, so the
+// server registered as a second, unlinked "mcp-agent" beside the session's hook
+// identity: the two-ids-one-session split behind i-647f5cc1 / i-71ffc7b0 /
+// i-a7a120fb / i-d0793813. Claude Code exports CLAUDECODE=1 + the session id to
+// every child, so being Claude's child is detected, never declared.
+const tool = argFlag("--tool") || (isClaudeChild() ? "claude-code" : "mcp-agent");
 const cwd = process.cwd();
 const { repoRoot, branch } = gitContext(cwd);
 const ws = workspaceId(repoRoot);
@@ -66,11 +75,24 @@ const db = getDb();
 // 2026-06-18). Gated to claude-code so a Codex server skips the process-tree walk.
 const LINK_POLL_MS = Number(process.env.AGENT_COORD_LINK_POLL_MS) || 4000;
 const anchorPids = tool === "claude-code" ? sessionAnchorPids(process.ppid) : [process.ppid];
+const startedAt = Date.now();
 let agentId = null;
+let basis = "standalone"; // env | link | standalone — surfaced by whoami
 if (tool === "claude-code") {
+  // Preferred: the session id Claude put in our environment hashes to EXACTLY
+  // the name the hooks resolve from their payload's session_id (same function,
+  // same claim store). No race with the SessionStart hook, no process walk, no
+  // reliance on an ancestor being named "claude".
   try {
-    agentId = await pollSessionLinkAny(anchorPids, LINK_POLL_MS);
+    agentId = agentIdFromEnv();
+    if (agentId) basis = "env";
   } catch {}
+  if (!agentId) {
+    try {
+      agentId = await pollSessionLinkAny(anchorPids, LINK_POLL_MS);
+      if (agentId) basis = "link";
+    } catch {}
+  }
 }
 let adopted = !!agentId;
 if (!agentId) agentId = agentIdFromSession(randomUUID());
@@ -104,7 +126,8 @@ const canon = (p) => canonicalFilePath(p, repoRoot);
 function handle(name, a) {
   switch (name) {
     case "whoami": {
-      const me = { agentId, tool, repo: repoRoot, branch, workspace: ws, version: VERSION };
+      const me = { agentId, tool, repo: repoRoot, branch, workspace: ws, version: VERSION, identityBasis: basis };
+      if (basis === "env") me.sessionId = sessionIdFromEnv();
       // Self-check (BUG 1 defense-in-depth): a claude-code server that never adopted
       // a hook link is the exact signature of the ghost-twin split — the hooks are
       // recording this session's file leases and commits under a DIFFERENT id than
@@ -182,10 +205,17 @@ function handle(name, a) {
       if (notes.length) out.note = notes.join(" ");
       return out;
     }
-    case "pending_push_review":
+    case "pending_push_review": {
       // Pass the resolved anchor pids so own-commit recognition reads the hook id
       // from the session-link under the claude.exe anchor, not the raw ppid (BUG 1).
-      return analyzePendingPush(db, repoRoot || cwd, agentId, { ppids: anchorPids });
+      // The repo is resolved from `repo` (any path inside it) when given — this
+      // server's cwd is fixed at spawn, so an agent working in a NESTED checkout
+      // (app_tracker inside Athena) would otherwise be answered about the outer
+      // one, confidently and without saying so (i-103b1445 / i-789380cb).
+      const target = a.repo ? gitContext(String(a.repo)).repoRoot : null;
+      if (a.repo && !target) return { error: `not a git repo: ${a.repo}` };
+      return analyzePendingPush(db, target || repoRoot || cwd, agentId, { ppids: anchorPids });
+    }
     case "ask_agent": {
       const askId = randomUUID().slice(0, 8);
       postMessage(db, { fromAgent: agentId, workspaceId: ws, body: `❓[ask:${askId}] ${a.question}`, toAgent: a.to, scope: "workspace" });
@@ -246,9 +276,22 @@ function handle(name, a) {
       const r = claimResource(db, { agentId, resourceId: a.resource_id, reason: a.reason });
       return { granted: r.granted, heldBy: r.granted ? null : r.conflict?.agent_id };
     }
-    case "release_resource":
-      releaseResource(db, { agentId, resourceId: a.resource_id });
-      return { released: a.resource_id };
+    case "release_resource": {
+      // Honest result: a release only deletes OUR lease. Reporting `released` for a
+      // resource someone else holds is how three agents lost half an hour each
+      // waiting on a deploy lock that "had been released" (i-e1e00240).
+      const n = releaseResource(db, { agentId, resourceId: a.resource_id });
+      if (n > 0) return { released: true, resource_id: a.resource_id };
+      const holder = db.prepare("SELECT agent_id FROM resource_leases WHERE resource_id=? AND expires_at > datetime('now')").get(a.resource_id)?.agent_id || null;
+      return {
+        released: false,
+        resource_id: a.resource_id,
+        heldBy: holder,
+        note: holder
+          ? `you don't hold this lease — ${holder} does; it frees when they release it or go silent for a few minutes. Don't force-release a live peer.`
+          : "nothing to release — no live lease under this id (check the exact id: the shell guard auto-claims deploy:<workspace-id>).",
+      };
+    }
     case "log_activity":
       logActivity(db, { agentId, workspaceId: ws, event: a.event, detail: a.detail });
       return { ok: true };
@@ -359,14 +402,27 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   // adopt its hook identity as soon as the link appears — before handling the call,
   // so nothing is ever claimed under the throwaway id. Gated to claude-code like the
   // startup adoption: only Claude publishes a hook link, so Codex never adopts one.
-  if (!adopted && tool === "claude-code") {
-    const r = reconcileServerIdentity(db, { agentId, ppids: anchorPids, tool, repoPath: repoRoot, branch });
-    if (r.adopted) {
-      agentId = r.agentId;
-      adopted = true;
+  if (tool === "claude-code") {
+    if (!adopted) {
+      const r = reconcileServerIdentity(db, { agentId, ppids: anchorPids, tool, repoPath: repoRoot, branch });
+      if (r.adopted) {
+        agentId = r.agentId;
+        adopted = true;
+        basis = "link";
+      }
+    } else {
+      // Already one agent with the hooks — stay one if the session renames
+      // itself under us (/clear). See followSessionLink.
+      const f = followSessionLink(db, { agentId, ppids: anchorPids, sinceTs: startedAt, tool, repoPath: repoRoot, branch });
+      if (f.changed) {
+        logActivity(db, { agentId: f.agentId, workspaceId: ws, event: "identity-follow", detail: `was ${f.from}` });
+        agentId = f.agentId;
+        basis = "link";
+      }
     }
   }
   heartbeat(db, agentId);
+  writeSnapshotThrottled(db); // the fleet mirror must not depend on a TUI statusline running (i-da708fe8)
   try {
     // Normalize model-supplied args against the tool's declared schema BEFORE
     // they can reach a SQL bind (see mcp/args.mjs — kills the field-reported

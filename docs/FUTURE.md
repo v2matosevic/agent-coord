@@ -13,16 +13,40 @@ Each item is tagged with rough **effort** (S/M/L) and **value** for the original
 setup it was built in (solo operator, many concurrent Claude/Codex sessions,
 web-dev studio, macOS + Windows).
 
-## Recommended next 3
+## Recommended next 3 (after v1.8.0)
 
-1. **Live two-agent shakedown on macOS** (S–M) — the standing open item. A
+1. **Hephaestus/ADE passes `--tool claude-code` and reads `whoami.identityBasis`**
+   (S, other repo: `app_tracker/apps/ade/src/lib/ade/toolProfile.ts:158`). The env
+   anchor already makes the flag unnecessary, but a profile that says what it is
+   documents the contract, and a tile that shows `identityBasis: standalone` for a
+   Claude session is the split made visible on the surface where it matters.
+2. **One id per real resource** (M). The shell guard auto-claims `deploy:<workspace-id>`
+   while agents hand-name `deploy:melora-prod`; the two never contend, so two holders
+   can both be "right" (i-e1e00240's second half). Make `claim_resource` on a `deploy:*`
+   id also take the workspace-keyed lease (or the guard check any live `deploy:*` lease
+   whose reason names this repo), and have the guard's block message print BOTH ids.
+3. **Attribution the reader can audit** (S). `pending_push_review` now says which repo
+   it looked at and recognises own commits from the env session id; the next gap is
+   the `manual` bucket — 1760 of ~1960 commits logged in the last 7 days on Olympus
+   were `manual`, almost all `baseline` commits from other projects' test fixtures
+   hitting the global hooksPath. Tag fixture/temp-dir repos as `fixture` (path under
+   `$TMP`) so they never count as "a human typed this", and report `unknown-author`
+   separately from `manual` (ADR-076: an empty answer carries its reason).
+
+_Also shipped 2026-08-29 (v1.8.0): the env-anchored identity — one session is one
+agent across hooks, MCP server, git hooks and CLI regardless of how the server was
+spawned; name retention across `/clear`; nested-repo-safe push review; honest
+`release_resource`; harness-preamble-proof overlap; snapshot refresh from every
+session's heartbeat path. The previous next-3 moves down:_
+
+4. **Live two-agent shakedown on macOS** (S–M) — the standing open item. A
    reproducible scripted scenario (two `claude -p` agents colliding on one file +
    one duplicating a task) to tune `DEAD_MS`/TTLs from real behaviour, now that the
    Mac is the primary box.
-2. **Linux/Windows notifications** (S) — generalize `lib/notify.mjs` beyond macOS
+5. **Linux/Windows notifications** (S) — generalize `lib/notify.mjs` beyond macOS
    (`notify-send` on Linux, PowerShell toast on Windows). The seam is already there
    and the operator works daily on Windows.
-3. **`npx agent-coord` installer + Homebrew formula** (S–M) — one-command install
+6. **`npx agent-coord` installer + Homebrew formula** (S–M) — one-command install
    for anyone, not just "clone + `node setup.mjs`."
 
 _Shipped from this list (v1.7.0): SessionStart-throttled digest auto-run; the

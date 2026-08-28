@@ -3,6 +3,51 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.8.0 — one session, one name, however the server was spawned
+
+Fifteen field reports from three repos over five weeks, all one bug. A Claude
+session showed up as TWO agents: the hooks registered it under one name (file
+leases, commit provenance, the duplicate-work guard) and the MCP server under
+another (`whoami`, `announce_intent`, messages). So `announce_intent` could not
+clear a stand-down the guard had imposed, `pending_push_review` told agents to
+go ask a "live peer" about their own commits, and peers were told a live agent
+had exited. Root cause, measured on a live server's environment: every Claude-only
+path was gated on the `--tool claude-code` flag, and Hephaestus/ADE writes its own
+MCP config without it. A server spawned that way answered `penguin`/`mcp-agent`
+while the hooks knew the same session as `hawk`.
+
+- **Identity comes from the environment Claude gives every child.**
+  `CLAUDE_CODE_SESSION_ID` reaches hooks, the shell tool, git hooks and each stdio
+  MCP server; hashed through the same claim store, every process of a session
+  names it identically — no flag, no race, no process walk, and no dependence on
+  an ancestor being called "claude" (npm-installed Claude runs as `node`).
+  `whoami` reports `identityBasis: env|link|standalone`.
+- **One window keeps its name across `/clear`.** A new session id under the same
+  claude process is bound to the name the window already has (only when the
+  previous holder is this process and still heartbeating). A server that was
+  already running follows a link newer than itself; an older link (pid reuse)
+  never renames it.
+- **Commits are attributed to the session that made them.** `cli/log-commit.mjs`
+  resolves env → committer marker → session-link → `manual`. The 30s per-repo
+  marker alone lost every chained `npm test && git commit`, which is where the
+  "my own commit came back manual" reports came from.
+- **`pending_push_review` says what it looked at**, in every result: `repo`,
+  `branch`, `upstreamRef`, `range`. It resolves the nearest checkout of the path
+  it is given, and takes a `repo` argument for a nested checkout. "Nothing to
+  push" about the wrong repository is no longer a possible answer.
+- **`release_resource` tells the truth.** `released:false` + `heldBy` when the
+  lease is a peer's, instead of a success that changed nothing.
+- **A harness preamble is not a task.** The Hephaestus "[Hephaestus] Local time…"
+  prefix is stripped before a prompt becomes `current_task`, and on read, so ADE
+  sessions stop being flagged as duplicates of each other for sharing it.
+- **`snapshot.json` refreshes from every session's heartbeat path**, throttled
+  to one rewrite per 20s machine-wide, instead of only from a TUI statusline that
+  half the fleet no longer runs.
+
+Tests: 35 → 39 (`identity-env`, `commit-attribution`, `release-resource`,
+`snapshot-throttle`; `pending-push` and `overlap` extended). Live servers run the
+old code until their session restarts — `whoami.version` shows which.
+
 ## v1.7.1 — the hook was shouting into a temp file
 
 A field report (`i-77824feb`, from a MeloraFinal session) caught the worst class

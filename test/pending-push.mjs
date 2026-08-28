@@ -10,6 +10,7 @@ import { logActivity } from "../lib/activity.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { analyzePendingPush } from "../lib/pending-push.mjs";
 import { writeSessionLink } from "../lib/session-link.mjs";
+import { agentIdFromSession } from "../lib/identity.mjs";
 
 const g = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8" }).trim();
 const base = mkdtempSync(join(tmpdir(), "pp-"));
@@ -58,7 +59,50 @@ writeSessionLink(process.ppid, HOOK);
 const r2 = analyzePendingPush(db, repo, STANDALONE);
 const linkVerdict = r2.commits.find((c) => c.subject === "feature via session-link")?.verdict;
 
+// Own-commit recognition via the env session id: the post-commit hook stamps
+// commits with agentIdFromSession(CLAUDE_CODE_SESSION_ID); a caller in that same
+// session (any id it happens to run under) must see them as push-mine.
+const SID = "pp-env-" + process.pid;
+const ENV_ME = agentIdFromSession(SID);
+const hEnv = commit("f.txt", "feature via env session");
+ensureAgent(db, { agentId: ENV_ME, repoPath: repo, branch: "main" }); // live → would be ask-peer without the bridge
+logActivity(db, { agentId: ENV_ME, workspaceId: ws, event: "commit", detail: `${hEnv}\tfeature via env session` });
+process.env.CLAUDE_CODE_SESSION_ID = SID;
+const r3 = analyzePendingPush(db, repo, "pp-someone-else-" + process.pid);
+delete process.env.CLAUDE_CODE_SESSION_ID;
+const envVerdict = r3.commits.find((c) => c.subject === "feature via env session")?.verdict;
+
+// Scope is named in EVERY result (i-789380cb / i-103b1445): the repo, branch and
+// upstream inspected — and a NESTED checkout resolves to itself, never the outer.
+const inner = join(work, "inner");
+const innerRemote = join(base, "inner-remote.git");
+execFileSync("git", ["init", "--bare", "-q", innerRemote]);
+execFileSync("git", ["clone", "-q", innerRemote, inner]);
+g(inner, "config", "user.email", "t@t");
+g(inner, "config", "user.name", "t");
+writeFileSync(join(inner, "i.txt"), "1");
+g(inner, "add", ".");
+g(inner, "commit", "-qm", "inner base");
+g(inner, "push", "-u", "-q", "origin", "HEAD");
+const rInnerClean = analyzePendingPush(db, join(inner, "deeper-nonexistent-cwd-parent") /* resolves up to inner */, ME);
+writeFileSync(join(inner, "j.txt"), "1");
+g(inner, "add", ".");
+g(inner, "commit", "-qm", "inner unpushed");
+const innerRoot = g(inner, "rev-parse", "--show-toplevel");
+const rInner = analyzePendingPush(db, inner, ME);
+const rOuter = analyzePendingPush(db, work, ME);
+const outerRoot = g(work, "rev-parse", "--show-toplevel");
+const scopeOk =
+  rInner.repo === innerRoot && rInner.commits.length === 1 && rInner.commits[0].subject === "inner unpushed" && typeof rInner.upstreamRef === "string" && rInner.range === `${rInner.upstreamRef}..HEAD` &&
+  rOuter.repo === outerRoot && rOuter.commits.length >= 4 &&
+  rInnerClean.repo === innerRoot && rInnerClean.commits.length === 0 && rInnerClean.upstream === true && rInnerClean.recommendation.includes(innerRoot);
+const notRepo = analyzePendingPush(db, join(base, "nowhere-" + process.pid), ME);
+const notRepoOk = notRepo.upstream === false && notRepo.commits.length === 0 && /not a git repo/i.test(notRepo.recommendation);
+
 const pass =
+  envVerdict === "push-mine" &&
+  scopeOk &&
+  notRepoOk &&
   v["feature by me"] === "push-mine" &&
   v["feature by peer"] === "push-peer-done" &&
   v["wip: half done"] === "hold-wip" &&
@@ -73,6 +117,8 @@ try {
 } catch {} // git holds Windows file locks briefly; temp dir is disposable
 
 console.log("verdicts:", JSON.stringify(v));
+console.log("env-session verdict:", envVerdict, "| nested scope ok:", scopeOk, "| non-repo ok:", notRepoOk);
+console.log("inner:", rInner.repo, rInner.range, "| outer:", rOuter.repo, rOuter.range);
 console.log("recommendation:", r.recommendation);
 console.log(pass ? "PASS ✅ provenance + push verdicts correct" : "FAIL ❌");
 process.exit(pass ? 0 : 1);

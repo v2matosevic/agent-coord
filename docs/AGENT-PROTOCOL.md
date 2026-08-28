@@ -171,6 +171,9 @@ If you're told to push and the history has commits from OTHER agents, don't
 reflexively ask the human "should I push these?" — work it out:
 
 1. Run `pending_push_review` (MCP) or `node $AGENT_COORD\cli\pending-push.mjs`.
+   Every result names the `repo`, `branch`, `upstreamRef` and `range` it inspected —
+   read them. Working in a NESTED checkout (a repo inside the repo this session
+   started in)? Pass `repo: "<path inside it>"` or the answer is about the outer one.
    Per unpushed commit it tells you the author, whether that agent is still live,
    and a verdict.
 2. Act on the verdicts:
