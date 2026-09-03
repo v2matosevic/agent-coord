@@ -1,5 +1,6 @@
 // Workspace-scoped messaging: broadcast + directed delivery, read-once,
-// cross-workspace isolation, and no self-delivery.
+// cross-workspace isolation FOR BROADCASTS (a directed message crosses rooms),
+// and no self-delivery.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,11 +29,15 @@ for (const id of [A, B, C]) ensureAgent(db, { agentId: id, repoPath: "/t", branc
 postMessage(db, { fromAgent: A, workspaceId: wsA, body: "hello room" }); // broadcast in wsA
 postMessage(db, { fromAgent: A, workspaceId: wsA, body: "hey B", toAgent: B }); // directed to B
 postMessage(db, { fromAgent: C, workspaceId: wsB, body: "other repo" }); // different workspace
+// ⭐ Directed from ANOTHER room (the 2-of-77 bug): C's server is pinned to wsB,
+// B listens in wsA. `to:` must be enough.
+postMessage(db, { fromAgent: C, workspaceId: wsB, body: "B, from the other repo", toAgent: B });
 
-const bMsgs = readMessages(db, { agentId: B, workspaceId: wsA }).messages; // broadcast + directed = 2
+const bMsgs = readMessages(db, { agentId: B, workspaceId: wsA }).messages; // broadcast + directed + cross-room directed = 3
 const aMsgs = readMessages(db, { agentId: A, workspaceId: wsA }).messages; // own messages excluded = 0
 const bAgain = readMessages(db, { agentId: B, workspaceId: wsA }).messages; // already read = 0
 const cUnread = unreadCount(db, { agentId: C, workspaceId: wsA }); // broadcast only (not directed-to-B) = 1
+const aCross = unreadCount(db, { agentId: A, workspaceId: wsA }); // C's wsB broadcast stays fenced; C's directed-to-B is not A's = 0
 
 clean();
 
@@ -94,8 +99,8 @@ const capOk =
   batch3.messages.length === 1 && batch3.remaining === 0 && batch3.remainingDirected === 0 && // final batch: nothing left
   drained === 0 && seen === "m1,m2,m3,m4,m5-yield";
 
-const pass = bMsgs.length === 2 && aMsgs.length === 0 && bAgain.length === 0 && cUnread === 1 && liveOk && capOk;
-console.log(`B sees ${bMsgs.length} (want 2) | A sees own ${aMsgs.length} (want 0) | B re-read ${bAgain.length} (want 0) | C unread ${cUnread} (want 1)`);
+const pass = bMsgs.length === 3 && aMsgs.length === 0 && bAgain.length === 0 && cUnread === 1 && aCross === 0 && liveOk && capOk;
+console.log(`B sees ${bMsgs.length} (want 3, one cross-room) | A sees own ${aMsgs.length} (want 0) | B re-read ${bAgain.length} (want 0) | C unread ${cUnread} (want 1) | A cross ${aCross} (want 0)`);
 console.log(`from_live: LIVE=${live[LIVE]} GONE=${live[GONE]} SUB(base-fallback)=${live[SUB]} (want true,false,true)`);
 console.log(`capped reads: 2+2+1 in order, remaining ${batch1.remaining},${batch2.remaining},${batch3.remaining} (want 3,1,0), directed-flag ${batch1.remainingDirected},${batch2.remainingDirected},${batch3.remainingDirected} (want 1,1,0) -> ${capOk ? "ok" : "BROKEN: " + seen}`);
 console.log(pass ? "PASS ✅ workspace-scoped, directed, read-once, no self-delivery, sender liveness, lossless capped reads" : "FAIL ❌");

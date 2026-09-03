@@ -22,7 +22,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "post_message",
-    description: "Leave a message for other agents to coordinate (e.g. 'refactoring auth, leave lib/auth alone'; 'API ready, wire the UI'). Default scope is THIS workspace (same repo). Pass scope:'global' for the whole fleet, or to:<agent_id> to direct it.",
+    description: "Leave a message for other agents to coordinate (e.g. 'refactoring auth, leave lib/auth alone'; 'API ready, wire the UI'). Default scope is THIS workspace (same repo) for broadcasts. Pass scope:'global' for the whole fleet, or to:<agent_id> to direct it — a directed message reaches its recipient in any repo. Messages live 7 days.",
     inputSchema: { type: "object", properties: { body: { type: "string" }, to: { type: "string" }, scope: { type: "string", enum: ["workspace", "global"] } }, required: ["body"] },
   },
   {

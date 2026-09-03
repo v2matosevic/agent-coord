@@ -55,8 +55,10 @@ You can leave notes for the other agents in your repo — and you'll automatical
 hear theirs. This is how you go from "avoid collisions" to actually coordinating.
 
 - **Post** with the MCP `post_message` tool. Default scope is THIS workspace (same
-  repo), so projects never bleed. `to:<agent_id>` directs it; `scope:'global'`
-  broadcasts to the whole fleet. Examples: "refactoring auth, leave lib/auth
+  repo), so broadcasts never bleed. `to:<agent_id>` directs it, and a directed
+  message reaches its recipient in ANY room (since 2026-09-03 — before that, 18 of
+  20 directed messages to live peers were written into a room the recipient never
+  read); `scope:'global'` broadcasts to the whole fleet. Messages live 7 days. Examples: "refactoring auth, leave lib/auth
   alone for ~20 min", "API routes are done — safe to wire the UI now."
 - **Receive** automatically: unread messages from peers are injected into your
   context at the start of each turn (you'll see a `📬` block). `read_messages`

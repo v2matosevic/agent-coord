@@ -52,6 +52,10 @@ checks["brief: unread mail"] = !!brief && brief.includes("✉ 1 unread");
 
 // Empty room -> still the identity one-liner (a solo agent must learn its own
 // name for free — that used to cost a whoami tool call), and nothing more.
+// ⚠ B's directed "heads up" follows B into ANY room since 2026-09-03 (a
+// directed message ignores the room), so consume it first — the empty room
+// must be empty of broadcasts AND of mail addressed to B.
+readMessages(db, { agentId: B, workspaceId: ws });
 const emptyWs = workspaceId("/t/decide-empty-" + process.pid);
 const solo = buildRoomBrief(db, { agentId: B, workspaceId: emptyWs, repoRoot: "/t/x" });
 checks["empty room -> identity line only"] = !!solo && solo.includes(`you are ${B}`) && solo.includes("alone") && !solo.includes("\n");
