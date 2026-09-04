@@ -27,7 +27,7 @@ The annotated `v1.9.0` tag points to
 `829aed4fc326767f1930a27903582a634541395e`. This handoff may be committed later on
 main. Do not move the version tag or silently replace its source assets.
 
-The [v1.9.0 GitHub release](https://github.com/v2matosevic/agent-coord/releases/tag/untagged-b767c44b5b8354b88215)
+The [v1.9.0 GitHub release](https://github.com/v2matosevic/agent-coord/releases)
 is a **draft**, not published. It contains source ZIP, tar.gz, SHA256SUMS, release
 notes and exact validation references. Both archives contain the same 154 files
 from the tagged commit. Downloaded assets were compared with the originals.
