@@ -79,9 +79,10 @@ try {
   const file = join(process.env.CODEX_HOME || join(homedir(), ".codex"), "hooks.json");
   const installed = JSON.parse(readFileSync(file, "utf8"));
   const wanted = codexHooks(ROOT);
+  const effectiveCommand = (hook) => process.platform === "win32" ? hook.commandWindows ?? hook.command : hook.command;
   const missing = CODEX_EVENTS.filter((event) => !(installed.hooks?.[event] || []).some((g) =>
     (!g.matcher || g.matcher === "*" || g.matcher === ".*") && (g.hooks || []).some((h) =>
-      h.type === "command" && h.command === wanted[event][0].hooks[0].command && h.enabled !== false)));
+      h.type === "command" && effectiveCommand(h) === effectiveCommand(wanted[event][0].hooks[0]) && h.enabled !== false)));
   add(!missing.length, "Codex hooks configured (trust/runtime not verified)", missing.length ? "missing: " + missing.join(", ") : file);
 } catch (e) {
   add(false, "Codex hooks configured", e.message);
