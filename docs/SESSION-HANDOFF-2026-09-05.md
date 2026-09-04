@@ -27,6 +27,29 @@ The annotated `v1.9.0` tag points to
 `829aed4fc326767f1930a27903582a634541395e`. This handoff may be committed later on
 main. Do not move the version tag or silently replace its source assets.
 
+### Concurrent work discovered during wrap-up
+
+Another live agent committed `8876633`, **Fix Codex coordination hook invocation
+in PowerShell**, between the handoff commits. It changes `lib/codex-install.mjs`,
+`cli/doctor.mjs` and adds `test/codex-command.mjs`. The documentation push through
+`63b983f` also carried that commit to origin/main. It is not part of the v1.9.0
+tag or its existing archive/test checkpoint. The author was notified and asked
+for validation/publication-readiness status. Re-read that reply before treating
+the concurrent fix as independently verified by this session.
+
+Subsequently, all six [CI jobs on 63b983f](https://github.com/v2matosevic/agent-coord/actions/runs/33925363476)
+passed, including that concurrent fix. The author's readiness reply and real
+host validation were still outstanding when this record was written.
+
+The push review correctly reported a live-peer blocker. The caller incorrectly
+chained the advisory CLI to `git push` based only on its exit status; the CLI
+exits zero even when its output lists blockers. This was not permission to push.
+Local issue `i-1cb0c8e9` records the incident and proposes an explicit machine-check
+mode. Until then, inspect structured `analyzePendingPush` output in a separate
+step and push only the exact reviewed commit SHA. Do not chain the advisory CLI
+exit code into a push. No deployment, release publication, tag move or unilateral
+revert was performed. The existing runtime results below remain tag-scoped.
+
 The [v1.9.0 GitHub release](https://github.com/v2matosevic/agent-coord/releases)
 is a **draft**, not published. It contains source ZIP, tar.gz, SHA256SUMS, release
 notes and exact validation references. Both archives contain the same 154 files
@@ -196,6 +219,8 @@ them before editing another repository or marking anything resolved.
   Check recognized shell-write guard coverage and safe worktree-based workflows.
 - `i-ab5d727a`: external integration hooks accumulated git staging processes and
   index locks under machine pressure. Do not kill unknown peers or remove their locks.
+- `i-1cb0c8e9`: provide a machine-checkable push review mode. Preserve existing
+  advisory behavior deliberately; test blockers, missing upstream and clean ranges.
 - `i-cf3e4c71`: unrelated application's flaky tests were included by the broad
   coordination-term survey. Confirm relevance rather than importing that scope.
 
