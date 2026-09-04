@@ -5,8 +5,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { codexContext, patchTargets } from "../lib/codex-context.mjs";
 import { getDb, setDegraded, clearDegraded } from "../lib/store.mjs";
-import { ensureAgent, heartbeatFresh, heartbeat, markDead } from "../lib/agents.mjs";
-import { claimFiles, claimResource, releaseAllForAgent, enqueue } from "../lib/leases.mjs";
+import { ensureAgentContext, heartbeat, markDead } from "../lib/agents.mjs";
+import { claimOperation, releaseAllForAgent, enqueue } from "../lib/leases.mjs";
 import { canonicalFilePath, isRepoRelative } from "../lib/path-canon.mjs";
 import { detectWriteTargets } from "../lib/bash-targets.mjs";
 import { detectResources } from "../lib/resource-rules.mjs";
@@ -19,7 +19,11 @@ import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 
 try {
   const input = JSON.parse(readFileSync(0, "utf8"));
-  const ctx = codexContext(input);
+  const args = input.tool_input || {};
+  const localTool = /^(?:Bash|PowerShell|exec_command|shell_command|apply_patch)$/.test(input.tool_name || "");
+  const executionCwd = localTool && typeof args.workdir === "string" && typeof input.cwd === "string"
+    ? resolve(input.cwd, args.workdir) : input.cwd;
+  const ctx = codexContext({ ...input, cwd: executionCwd });
   const { agentId, repoRoot, branch, ws } = ctx;
   const event = input.hook_event_name;
   const db = getDb();
@@ -32,9 +36,7 @@ try {
     writeSnapshotThrottled(db);
     process.exit(0);
   }
-  if (!heartbeatFresh(agentId) || ["SessionStart", "SubagentStart", "UserPromptSubmit"].includes(event)) {
-    ensureAgent(db, { agentId, tool: "codex", repoPath: repoRoot || ctx.cwd, branch });
-  }
+  ensureAgentContext(db, { agentId, tool: "codex", repoPath: repoRoot || ctx.cwd, branch });
   if (event === "SessionStart" || event === "SubagentStart") {
     const brief = buildRoomBrief(db, { agentId, workspaceId: ws, repoRoot, wrap: (s) => s + "\n" });
     if (brief) process.stdout.write(brief + "\n");
@@ -48,7 +50,6 @@ try {
     if (out) process.stdout.write(out);
   } else if (event === "PreToolUse") {
     const tool = input.tool_name || "";
-    const args = input.tool_input || {};
     if (/^mcp__agent[_-]coord__/.test(tool)) {
       // This is request-local: parent and child calls sharing one MCP transport
       // cannot rename each other. Preserve all original model arguments.
@@ -61,7 +62,7 @@ try {
     } else {
       const shell = /^(?:Bash|PowerShell|exec_command|shell_command)$/.test(tool);
       const command = args.command ?? args.cmd ?? "";
-      const cwd = typeof args.workdir === "string" ? resolve(ctx.cwd, args.workdir) : ctx.cwd;
+      const cwd = ctx.cwd;
       let paths = [];
       if (tool === "apply_patch") paths = patchTargets(args).map((p) => canonicalFilePath(resolve(cwd, p), repoRoot));
       else if (shell && repoRoot) paths = detectWriteTargets(command, repoRoot, cwd);
@@ -73,24 +74,25 @@ try {
           process.exit(2);
         }
       }
-      const result = paths.length ? claimFiles(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, paths, reason: tool }) : { granted: true };
+      const isCommit = shell && /\bgit\s+commit\b/.test(command);
+      const resources = shell && !isCommit ? detectResources(command, { workspaceId: ws, repoRoot })
+        .map((r) => ({ resourceId: r.resourceId, reason: r.label })) : [];
+      const result = paths.length || resources.length
+        ? claimOperation(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, paths, resources, reason: tool })
+        : { granted: true };
       if (!result.granted) {
+        if (result.kind === "resource") {
+          logActivity(db, { agentId, workspaceId: ws, event: "resource-conflict", detail: result.resourceId });
+          process.stderr.write(`agent-coord: ${result.resourceId} is held by ${result.conflict.agent_id}. Wait or coordinate.\n`);
+          process.exit(2);
+        }
         enqueue(db, { kind: "file", key: ws + "||" + result.path, agentId });
         logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: result.path });
         process.stderr.write(`agent-coord: "${result.path}" is held by ${result.conflict.agent_id}. Edit elsewhere or coordinate; the lease frees when they move on.\n`);
         process.exit(2);
       }
-      if (shell) {
-        const isCommit = /\bgit\s+commit\b/.test(command);
-        if (isCommit) writeCommitterMarker(repoRoot, agentId);
-        else for (const resource of detectResources(command, { workspaceId: ws, repoRoot })) {
-          const r = claimResource(db, { agentId, resourceId: resource.resourceId, reason: resource.label });
-          if (!r.granted) {
-            process.stderr.write(`agent-coord: ${resource.resourceId} is held by ${r.conflict.agent_id}. Wait or coordinate.\n`);
-            process.exit(2);
-          }
-        }
-      }
+      if (isCommit) writeCommitterMarker(repoRoot, agentId);
+      for (const r of resources) logActivity(db, { agentId, workspaceId: ws, event: "resource-claim", detail: r.resourceId });
       for (const path of paths) logActivity(db, { agentId, workspaceId: ws, event: "claim", detail: path });
     }
   }

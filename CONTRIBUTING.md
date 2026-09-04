@@ -16,7 +16,7 @@ welcome as long as they keep it that way. By participating you agree to the
 - **Cross-platform.** Everything runs on Windows, macOS, and Linux. Platform
   branches use `process.platform`; paths go through `lib/path-canon.mjs`. CI
   runs the suite on all three.
-- **Node ≥ 22** (for `node:sqlite`). No build step, no transpilation — plain
+- **Node 22.13+ (22.x) or 24+** (for unflagged `node:sqlite`). No build step, no transpilation — plain
   ESM `.mjs` everywhere.
 
 ## Getting set up
@@ -41,6 +41,11 @@ never touches a live installation. To try your changes live, run `node setup.mjs
   non-zero on failure — no framework, follow the pattern of a neighboring test.
 - Tests must pass with an isolated `AGENT_COORD_HOME` and must not fire real
   notifications (`AGENT_COORD_NOTIFY=0` is set by the runner).
+- Installer tests must also isolate `GIT_CONFIG_GLOBAL` and Codex config paths.
+  Never run setup against a contributor's real configuration as a test fixture.
+- Native hook changes need boundary coverage: working directories, directory
+  aliases, partially blocked operations, session teardown, and shared MCP clients.
+- Release procedure and validation gates: [docs/RELEASING.md](./docs/RELEASING.md).
 
 ## Code style
 

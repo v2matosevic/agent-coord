@@ -22,9 +22,10 @@ supplied its session context. See [Codex integration](./CODEX.md) for limits.
 - Codex `apply_patch` claims every added, changed, deleted, and renamed path
   together. A blocked patch leaves no partial claims. Hooks and MCP tools use
   the same session identity, even when multiple threads share an MCP connection.
-- **If you were blocked, you'll be told when it frees** — a `✅ "<path>" is free
-  now` line arrives mid-turn the moment the holder releases / goes cold / dies.
-  No blind retry loop needed: do other work and act when it arrives.
+- **If you were blocked, you'll be told when it frees.** An availability
+  notification arrives at a later context-delivery event after the holder
+  releases, goes cold or dies. It does not reserve the file: claim it again and
+  re-read its current contents before editing. Do other work while waiting.
 - Before risky shell commands (`Bash` **or `PowerShell`**: dev server,
   `drizzle-kit push`/migrations, deploy) a hook **claims the shared resource** — a
   dev port is machine-wide (two repos on one port collide), a deploy is keyed to
@@ -59,7 +60,23 @@ supplied its session context. See [Codex integration](./CODEX.md) for limits.
    gives you your own worktree + branch + port so you physically can't collide;
    merge back when done.
 
-## Talk to each other (workspace-scoped messaging)
+## Keep file handoffs short
+
+Reserve files for a coherent edit, not for the entire task. Release finished
+files explicitly with `release_files({paths:[...]})` once the edit is saved and
+you no longer need that shared checkout to stay unchanged. A test run against
+shared files can be invalidated by a peer's edits; use a separate worktree when
+the test needs a stable snapshot. Reclaim and re-read before the next edit.
+Never apply a replacement generated from stale file contents after a handoff.
+
+For substantial independent changes to the same file, use separate worktrees
+and one integration owner who merges and tests the combined result. Split tasks
+by responsibility and let one agent assemble shared entry points when practical.
+Do not use shared claims as permission for concurrent writes.
+See [concurrent editing](CONCURRENT-EDITING.md) for the current behavior, limits
+and proposed next improvements.
+
+## Workspace messages
 
 You can leave notes for the other agents in your repo — and you'll automatically
 hear theirs. This is how you go from "avoid collisions" to actually coordinating.

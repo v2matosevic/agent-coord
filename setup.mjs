@@ -16,6 +16,14 @@ const sh = (parts) => spawnSync(parts.map(q).join(" "), { cwd: ROOT, shell: true
 const has = (cmd) => spawnSync(process.platform === "win32" ? "where" : "which", [cmd], { stdio: "ignore" }).status === 0;
 const server = join(ROOT, "mcp", "server.mjs");
 
+// Check the real runtime before npm or any machine-wide configuration changes.
+// node:sqlite was flag-gated before 22.13; a major-version check is insufficient.
+const runtime = spawnSync(NODE, [FLAG, "--input-type=module", "-e", "import { DatabaseSync } from 'node:sqlite'; const db = new DatabaseSync(':memory:'); db.close();"], { encoding: "utf8" });
+if (runtime.status !== 0) {
+  console.error("agent-coord requires Node 22.13+ (22.x) or Node 24+. Upgrade Node before setup; no configuration was changed.");
+  process.exit(1);
+}
+
 console.log("== agent-coord setup ==");
 console.log("root:", ROOT, "\nnode:", NODE, "\n");
 
@@ -37,7 +45,7 @@ if (has("claude")) {
 console.log("\n[5/6] Codex hooks + MCP server");
 sh([NODE, FLAG, join(ROOT, "cli", "install-codex-hooks.mjs")]);
 if (has("codex")) {
-  spawnSync("codex mcp remove agent-coord", { shell: true, stdio: "ignore" });
+  // Codex add updates an existing entry. Keep it configured if the write fails.
   sh(["codex", "mcp", "add", "agent-coord", "--", NODE, FLAG, server, "--tool", "codex"]);
 } else console.log("  codex CLI not on PATH — skipped");
 

@@ -64,7 +64,13 @@ try {
 }
 
 add(existsSync(join(ROOT, "mcp", "server.mjs")), "MCP server file");
-add(existsSync(join(ROOT, "node_modules", "@modelcontextprotocol", "sdk")), "MCP SDK installed");
+try {
+  await import("@modelcontextprotocol/sdk/server/index.js");
+  await import("@modelcontextprotocol/sdk/server/stdio.js");
+  add(true, "MCP SDK loads");
+} catch (e) {
+  add(false, "MCP SDK loads", e.message);
+}
 
 try {
   const file = join(process.env.CODEX_HOME || join(homedir(), ".codex"), "hooks.json");

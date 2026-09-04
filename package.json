@@ -15,7 +15,7 @@
     "setup": "node setup.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": "^22.13.0 || >=24.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0"

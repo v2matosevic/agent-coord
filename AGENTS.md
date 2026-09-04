@@ -14,8 +14,8 @@ bottom; it is idempotent (safe to re-run) and cross-platform.
 
 Run these and confirm before continuing:
 
-- **Node ≥ 22** (required — uses the built-in `node:sqlite`):
-  `node --version`  → must be v22 or newer. If older, stop and tell the human to upgrade Node.
+- **Node 22.13+ (22.x) or 24+** (required for unflagged `node:sqlite`):
+  `node --version`. Setup probes SQLite before modifying configuration.
 - **git present:** `git --version`.
 - You are at the repo root (this file is here): the folder contains `setup.mjs`, `cli/`, `hooks/`, `mcp/`.
 
@@ -53,11 +53,10 @@ Expect **`10/10 checks passed`**. Hook configuration is checked, not Codex trust
 
 Then confirm the test suite is green (isolated store, touches nothing live):
 ```bash
-# each must print PASS / exit 0
-for t in concurrency cold-lease overlap session-link messages precommit liveness; do
-  AGENT_COORD_HOME="$(mktemp -d)" node --disable-warning=ExperimentalWarning test/$t.mjs ; done
+npm test
 ```
-(On Windows PowerShell, set `$env:AGENT_COORD_HOME` to a temp dir per run instead.)
+The runner creates a temporary store for each test and scrubs inherited agent
+identity. It works unchanged in PowerShell, Bash and CI.
 
 ## 3. Report back to the human
 

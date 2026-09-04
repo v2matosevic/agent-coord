@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, chmodSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -80,12 +80,18 @@ let prior = "";
 try {
   prior = execFileSync("git", ["config", "--global", "--get", "core.hooksPath"], { encoding: "utf8" }).trim();
 } catch {}
-writeFileSync(join(COORD_HOME, "git-hookspath.prior"), prior || "(unset)");
-
 const posixDir = dir.replace(/\\/g, "/");
+const norm = (p) => process.platform === "win32" ? p.replace(/\\/g, "/").toLowerCase() : p;
+const priorFile = join(COORD_HOME, "git-hookspath.prior");
+// On reinstallation, the current value is ours. Saving it would erase the
+// operator's actual rollback destination. Only save a value we are replacing.
+if (norm(prior) !== norm(posixDir)) writeFileSync(priorFile, prior || "(unset)");
+let saved = null;
+try { saved = readFileSync(priorFile, "utf8").trim(); } catch {}
+if (saved && norm(saved) === norm(posixDir)) saved = null; // old installers saved themselves
 execFileSync("git", ["config", "--global", "core.hooksPath", posixDir]);
 
 console.log("✅ global pre-commit + post-commit + pre-push installed for ALL repos");
 console.log("   core.hooksPath ->", posixDir);
-console.log("   prior value:", prior || "(unset)", "(saved to git-hookspath.prior)");
-console.log("   revert: git config --global --unset core.hooksPath" + (prior ? `  # was ${prior}` : ""));
+console.log("   prior value:", saved || "unknown (already installed; original value unavailable)");
+console.log("   revert: restore the saved prior value, or unset core.hooksPath if it was originally unset");

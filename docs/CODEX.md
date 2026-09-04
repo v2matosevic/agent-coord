@@ -43,7 +43,10 @@ require review in Codex. Setup does not modify trust or approval settings.
 
 Patches reserve all source and destination paths in one transaction. A denied
 patch rolls back new claims and preserves older claims exactly. Relative patch
-paths resolve against the hook's working directory. Shell detection reuses the
+paths resolve against the hook's working directory, including directory aliases
+and paths that do not exist yet. Shell `workdir` overrides select the command's
+actual repository and update fleet presence immediately. Shell file and resource
+reservations succeed together or roll back together. Shell detection reuses the
 existing command rules. It cannot inspect arbitrary scripts, interpreter code,
 or every shell construct. Hosted tools do not run these local hooks.
 
@@ -62,10 +65,10 @@ until restarted. A configured hook is not proof that a client runs it.
 
 ## Verification and removal
 
-Verified on Windows with Node 22.22.0 on 2026-09-04: all 41 isolated tests passed,
-including the actual timed MCP heartbeat and overlapping reconnects. Setup
-completed and doctor reported 10/10 configuration checks. Native hook execution
-inside a newly trusted Codex session remains an operator verification step.
+Release verification is recorded in [v1.9.0 notes](./releases/v1.9.0.md).
+The installed Codex CLI 0.153.3 exposes the stable `hooks` feature, enabled.
+Feature availability and configured handlers do not establish hook trust or
+actual delivery inside a new session.
 
 `npm test` runs each test against an isolated store. `test/codex-hooks.mjs` uses
 native event fixtures, real stdio MCP calls, and temporary git repositories to
@@ -76,3 +79,17 @@ To remove native Codex integration, remove only handlers marked
 `x-agent-coord: true` from the active `hooks.json`, or restore its backup after
 checking for later edits. Restart sessions. MCP and git integrations have their
 own uninstall steps in `AGENTS.md`.
+
+## Native session smoke check
+
+After trusting the installed definitions in `/hooks`, use two fresh Codex
+sessions in a disposable git repository. In session A, announce a task and
+claim `coord-smoke.txt`; in B, attempt to patch that file. B should receive a
+block naming A, and the file should remain unchanged. Send a short directed
+message from A to B; B's next local tool result should carry it. Release A's
+claim and repeat B's patch, which should now succeed. `whoami` in both sessions
+must report distinct identities and `coordinationMode: native-hooks`.
+
+This step uses the actual host hook dispatcher. An isolated fixture passing the
+same JSON to the hook script does not replace it. Do not bypass hook trust for
+the check. Hosted web search does not count as a local tool call.

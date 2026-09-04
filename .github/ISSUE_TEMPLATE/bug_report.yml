@@ -23,7 +23,7 @@ body:
     attributes:
       label: Environment
       description: OS + Node version + which agent(s)
-      placeholder: "macOS 15 (arm64), Node 22.11, Claude Code + Codex"
+      placeholder: "macOS (arm64), Node 22.13+, Claude Code + Codex (include Codex version and whether hooks are trusted)"
     validations:
       required: true
   - type: textarea

@@ -1,6 +1,7 @@
 node_modules/
 *.log
 *.vsix
+.release/
 .DS_Store
 
 # Machine-local Claude/Hermes wiring — never tracked (each machine runs 'hermes hook install' locally if it wants auto-sync)

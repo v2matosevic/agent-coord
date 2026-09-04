@@ -23,6 +23,20 @@ hooks with backups; Codex requires user review/trust before running them.
   It explicitly distinguishes configured hooks from trusted/running hooks.
 - Isolated regression coverage uses native event fixtures, real stdio MCP and
   temporary git repositories. See docs/CODEX.md for activation and limits.
+- File and resource claims roll back together when a shell operation is blocked.
+  Explicit shell work directories, directory aliases and newly created files
+  resolve to the correct workspace. Fleet context refreshes during warm heartbeats.
+- Reinstalling preserves the original global git-hook rollback setting. Setup
+  checks SQLite availability before making changes; CI tests Node 22.13.0 and 24.
+- Push review consistently uses the latest commit attribution, independent of
+  SQLite query ordering. Release preparation and validation limits are documented.
+- Updated vulnerable transitive dependencies within compatible version ranges.
+  The release procedure includes a fresh dependency audit.
+- Doctor loads the MCP SDK instead of accepting an empty dependency directory.
+- Codex MCP setup updates the entry directly, preserving the existing connection
+  if a Windows configuration write fails.
+- Added concurrent-editing guidance for short file handoffs and isolated
+  worktrees. Availability notices now require reclaiming and re-reading files.
 
 ## v1.8.0 — one session, one name, however the server was spawned
 

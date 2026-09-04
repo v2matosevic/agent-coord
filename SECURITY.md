@@ -14,16 +14,24 @@ What that means in practice:
 - The store contains workspace paths, branch names, file paths, task titles, and
   agent messages — treat it like the rest of your dev environment, not like a
   secret store. Don't put credentials in task titles or messages.
-- Coordination is advisory-by-default: the hard blocks (Claude `PreToolUse`,
+- Coordination is advisory-by-default: the hard blocks (Claude or trusted Codex `PreToolUse`,
   the git pre-commit/pre-push net) are guardrails against *accidents between
   cooperating agents*, not a sandbox against a malicious process.
 
 ## Hooks run code
 
-`setup.mjs` wires hooks into Claude Code, your global git `core.hooksPath`, and
+`setup.mjs` wires hooks into Claude Code, Codex, your global git `core.hooksPath`, and
 your MCP configs. Review what it does before running it — it's short, readable,
 and prints every change it makes. Same standard applies to any PR touching
 `setup.mjs`, `hooks/`, or `git/`.
+
+Codex requires review/trust of hook definitions before running them. The
+installer does not modify that trust store. `_coord` is session metadata added
+by the native hook, not an authentication token. A same-user process can supply
+it directly. Only agent-coord MCP calls are rewritten; shell/edit approvals
+remain with the host. Hosted tools and arbitrary scripts are outside hook
+coverage. A per-repository git hook override or `--no-verify` can bypass the
+global git guard. Fail-open store errors are reported as degraded operation.
 
 ## Reporting a vulnerability
 

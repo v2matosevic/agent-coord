@@ -12,6 +12,18 @@ hooks/CLI are zero-dependency, only the MCP server uses `@modelcontextprotocol/s
 
 ## 1. The problem it solves
 
+### v1.9.0 integration update
+
+The diagrams below originated with the Claude-only hook implementation. Native
+Codex lifecycle hooks now provide local pre-write guards and message delivery
+after user trust review. See [Codex setup and limits](CODEX.md) for the current
+event contract and [release notes](releases/v1.9.0.md) for validation scope.
+MCP context is resolved per request when native hooks supply session metadata;
+a shared transport is not assumed to represent only one agent. File/resource
+claims for a native operation are atomic, and repository changes update presence
+even inside the heartbeat throttle window. Hosted tools and arbitrary scripts
+remain outside guaranteed pre-write coverage.
+
 The operator runs many AI coding agents at once — several Claude Code terminals in one
 VS Code window on one repo, plus more across other windows/repos, plus Codex.
 Each agent process is an island with zero shared state, so they: edit the same

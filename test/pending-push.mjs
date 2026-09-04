@@ -40,11 +40,18 @@ ensureAgent(db, { agentId: ME, repoPath: repo, branch: "main" });
 ensureAgent(db, { agentId: PEER, repoPath: repo, branch: "main" });
 writeTxn(db, () => db.prepare("UPDATE agents SET last_heartbeat=? WHERE agent_id=?").run(isoAgoMs(10 * 60 * 1000), PEER)); // PEER finished
 logActivity(db, { agentId: ME, workspaceId: ws, event: "commit", detail: `${hMine}\tfeature by me` });
+// A hook may have recorded a fallback before the final attribution was known.
+// Query-plan order must never let that older record overwrite the newer one.
+logActivity(db, { agentId: "manual", workspaceId: ws, event: "commit", detail: `${hPeer}\tfeature by peer` });
 logActivity(db, { agentId: PEER, workspaceId: ws, event: "commit", detail: `${hPeer}\tfeature by peer` });
 logActivity(db, { agentId: PEER, workspaceId: ws, event: "commit", detail: `${hWip}\twip: half done` });
 
 const r = analyzePendingPush(db, repo, ME);
 const v = Object.fromEntries(r.commits.map((c) => [c.subject, c.verdict]));
+db.exec("PRAGMA reverse_unordered_selects=ON");
+const reversed = analyzePendingPush(db, repo, ME);
+db.exec("PRAGMA reverse_unordered_selects=OFF");
+const stableAttribution = reversed.commits.find((c) => c.hash === hPeer)?.verdict === "push-peer-done";
 
 // Session-link recognition: the MCP server resolved a STANDALONE id (lost the
 // SessionStart race / resumed), but the commit is by the HOOK id this session is
@@ -100,6 +107,7 @@ const notRepo = analyzePendingPush(db, join(base, "nowhere-" + process.pid), ME)
 const notRepoOk = notRepo.upstream === false && notRepo.commits.length === 0 && /not a git repo/i.test(notRepo.recommendation);
 
 const pass =
+  stableAttribution &&
   envVerdict === "push-mine" &&
   scopeOk &&
   notRepoOk &&

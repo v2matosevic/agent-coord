@@ -1,10 +1,14 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -14,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node: [22, 24]
+        node: [22.13.0, 24]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -30,3 +34,12 @@ jobs:
       - run: npm test
         env:
           AGENT_COORD_NOTIFY: "0"
+      - name: Smoke test a source archive without checkout metadata
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 24
+        shell: bash
+        run: |
+          archive_dir="$(mktemp -d)"
+          git archive --format=tar HEAD | tar -x -C "$archive_dir"
+          cd "$archive_dir"
+          npm ci --no-audit --no-fund
+          node --disable-warning=ExperimentalWarning test/run-all.mjs mcp-smoke codex-hooks

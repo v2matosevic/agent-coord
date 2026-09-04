@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/v2matosevic/agent-coord/actions/workflows/ci.yml/badge.svg)](https://github.com/v2matosevic/agent-coord/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Node ≥ 22](https://img.shields.io/badge/node-%E2%89%A5%2022-brightgreen.svg)](https://nodejs.org)
+[![Node 22.13+ / 24+](https://img.shields.io/badge/node-22.13%2B%20%2F%2024%2B-brightgreen.svg)](https://nodejs.org)
 ![Platforms](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-8a8076.svg)
 
 **A machine-wide coordination layer so multiple AI coding agents running at once
@@ -61,7 +61,8 @@ or, on Windows (also builds the VS Code Fleet panel):
 Both are **idempotent** (safe to re-run) and **fail-soft** (skip a step if a CLI
 isn't installed). They wire Claude and Codex hooks, Claude's statusline, the global git
 pre-commit net, and the MCP server into Claude and Codex, then run the health
-check. **Requires Node ≥ 22.** Open new agent sessions afterward to pick it up.
+check. **Requires Node 22.13+ (22.x) or Node 24+.** Setup probes SQLite before
+modifying configuration. Open new agent sessions afterward to pick it up.
 In Codex, review/trust the new hooks in `/hooks`. Until trusted, use MCP claims
 and message polling. See [Codex integration](./docs/CODEX.md).
 
@@ -143,7 +144,7 @@ guards fail **open but loud**: you lose coordination, never your work.
   `announce_intent` returns the whole arrival brief (your identity, live peers +
   their tasks, the board, standing decisions, unread mail) — one call instead of
   a `whoami`/`list_active_agents`/`list_tasks` round, and the only arrival
-  channel a hookless agent (Codex) has. Every list an agent ingests is capped
+  channel an agent without native hooks has. Every list an agent ingests is capped
   but **lossless and loud**: message backlogs drain in batches with an exact
   `remaining` count (a directed message stuck behind broadcasts is flagged
   urgently), and truncation always says so — a partial dump never reads as
@@ -159,7 +160,7 @@ guards fail **open but loud**: you lose coordination, never your work.
 ## Commands
 
 ```bash
-node cli/doctor.mjs                 # 9-point health check
+node cli/doctor.mjs                 # 10 configuration/runtime checks (Codex trust checked separately)
 node cli/status.mjs                 # one-shot fleet table
 node cli/watch.mjs                  # live fleet in the terminal (2s)
 node cli/dashboard.mjs [port]       # live browser dashboard (default :7777)
@@ -246,7 +247,9 @@ npm test                          # full suite, each test in an isolated throwaw
 node test/run-all.mjs messages    # filter by name
 ```
 
-CI runs the suite on Windows, macOS, and Linux (Node 22 + 24) on every push and PR.
+CI runs the suite on Windows, macOS, and Linux (Node 22.13.0 + 24) on every push and PR.
+The minimum Node 22 version is pinned deliberately; the local verification and
+release status are recorded in [the release notes](./docs/releases/v1.9.0.md).
 
 ## Uninstall
 
@@ -256,6 +259,11 @@ claude mcp remove agent-coord --scope user
 codex mcp remove agent-coord
 # restore a ~/.claude/settings.json.bak.*  and delete ~/.agent-coord/
 ```
+Before removing the store, read `git-hookspath.prior` and restore that path if
+it was set. A backup made by an older installer may point back to agent-coord;
+that does not recover the original setting. Remove only handlers marked
+`x-agent-coord` from Codex's `hooks.json`, preserving other tools' hooks.
+See [Codex removal](./docs/CODEX.md#verification-and-removal).
 
 ## How it compares
 
@@ -282,6 +290,8 @@ Coordination is advisory-by-default; the **hard** blocks are Claude Code or trus
 `PreToolUse` (pre-write) and the git pre-commit hook (at commit, every committer).
 Clients without native hooks get awareness via MCP and the commit net. Codex
 hooks do not cover hosted tools or arbitrary scripts; shell parsing is heuristic.
+Git's `--no-verify` and repository-specific `core.hooksPath` overrides can bypass
+the global guard. Check the effective hook path when diagnosing a missed block.
 Locks are whole-file. A single-user machine is assumed — there's no auth boundary
 in the store. See [`DESIGN.md` §9](./DESIGN.md) for the full list.
 
@@ -290,6 +300,8 @@ in the store. See [`DESIGN.md` §9](./DESIGN.md) for the full list.
 - [`AGENTS.md`](./AGENTS.md) — install/operation runbook for AI agents.
 - [`docs/SYSTEM.md`](./docs/SYSTEM.md) — complete as-built reference.
 - [`docs/AGENT-PROTOCOL.md`](./docs/AGENT-PROTOCOL.md) — how agents should coordinate.
+- [`docs/CODEX.md`](./docs/CODEX.md) — native Codex setup, behavior, trust and limits.
+- [`docs/RELEASING.md`](./docs/RELEASING.md) — release validation, source archives and publication.
 - [`DESIGN.md`](./DESIGN.md) — original architecture & rationale.
 - [`docs/FUTURE.md`](./docs/FUTURE.md) — roadmap beyond the macOS expansion.
 - [`CHANGELOG.md`](./CHANGELOG.md) — what's been built.
@@ -303,9 +315,6 @@ a vulnerability: [`SECURITY.md`](./SECURITY.md). Licensed [MIT](./LICENSE).
 
 ---
 
-Platform: developed on **Windows 11 + PowerShell 7** and also installed & proven on
-**macOS (Apple Silicon)** — both with Claude Code and Codex. The core (Node +
-`node:sqlite` + the hooks/MCP/CLI) is portable; `node setup.mjs` runs on
-Windows/macOS/Linux (doctor 9/9, suite 17/17 on macOS). The few Windows-specific
-runtime paths branch on `process.platform`, so each OS keeps its native behaviour.
-Single-user machine by design.
+Developed on Windows and macOS, with automated tests on Windows, macOS and Linux.
+Native Codex hook fixtures and MCP integration tests are separate from validation
+inside a user's trusted Codex session. Single-user machine by design.

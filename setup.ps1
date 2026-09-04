@@ -6,6 +6,9 @@ $root = ($PSScriptRoot -replace '\\', '/')
 $node = "node"
 $flag = "--disable-warning=ExperimentalWarning"
 
+& $node $flag --input-type=module -e "import { DatabaseSync } from 'node:sqlite'; const db = new DatabaseSync(':memory:'); db.close();"
+if ($LASTEXITCODE -ne 0) { throw "agent-coord requires Node 22.13+ (22.x) or Node 24+. No configuration was changed." }
+
 Write-Host "== agent-coord setup ==" -ForegroundColor Cyan
 
 # 1. npm deps (only the MCP server needs them)
@@ -22,11 +25,10 @@ Write-Host "`n[2/6] Claude hooks"
 Write-Host "`n[3/6] global git pre-commit"
 & $node $flag "$root/cli/install-global.mjs"
 
-# 4. Codex MCP server (if codex is installed) — remove-then-add for idempotency
+# 4. Codex MCP server (add updates the existing entry without removing it first)
 Write-Host "`n[4/6] Codex MCP"
 & $node $flag "$root/cli/install-codex-hooks.mjs"
 if (Get-Command codex -ErrorAction SilentlyContinue) {
-  & codex mcp remove agent-coord 2>$null | Out-Null
   & codex mcp add agent-coord -- $node $flag "$root/mcp/server.mjs" --tool codex
 } else {
   Write-Host "  codex not found — skipped"

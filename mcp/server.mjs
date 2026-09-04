@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { agentIdFromSession, agentIdFromEnv, isClaudeChild, sessionIdFromEnv } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb } from "../lib/store.mjs";
-import { ensureAgent, heartbeat, heartbeatFresh, setIntent, markDead } from "../lib/agents.mjs";
+import { ensureAgent, ensureAgentContext, heartbeat, setIntent, markDead } from "../lib/agents.mjs";
 import { claimFile, releaseFile, claimResource, releaseResource, releaseAllForAgent, peekConflicts } from "../lib/leases.mjs";
 import { logActivity, getFleet, getGlobalState } from "../lib/activity.mjs";
 import { postMessage, readMessages, findReplies, annotateSenders } from "../lib/messages.mjs";
@@ -445,9 +445,12 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         }
       }
     }
-    const context = hookContext || { agentId, tool, repoRoot, branch, ws, cwd, basis, adopted, anchorPids, sessionId: basis === "env" ? sessionIdFromEnv(process.env, tool) : null };
+    const current = hookContext ? null : gitContext(cwd);
+    const context = hookContext || { agentId, tool, repoRoot: current.repoRoot, branch: current.branch,
+      ws: workspaceId(current.repoRoot || cwd), cwd, basis, adopted, anchorPids,
+      sessionId: basis === "env" ? sessionIdFromEnv(process.env, tool) : null };
     if (!hookContext) defaultUsed = true;
-    if (!heartbeatFresh(context.agentId)) ensureAgent(db, { agentId: context.agentId, tool: context.tool, repoPath: context.repoRoot || context.cwd, branch: context.branch });
+    ensureAgentContext(db, { agentId: context.agentId, tool: context.tool, repoPath: context.repoRoot || context.cwd, branch: context.branch });
     heartbeat(db, context.agentId);
     writeSnapshotThrottled(db); // the fleet mirror must not depend on a TUI statusline running (i-da708fe8)
     // Normalize model-supplied args against the tool's declared schema BEFORE
@@ -467,7 +470,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 const pulse = setInterval(() => {
   if (cleaned || adopted || usingHookContext || !defaultUsed) return;
   try {
-    if (!heartbeatFresh(agentId)) ensureAgent(db, { agentId, tool, repoPath: repoRoot, branch });
+    const current = gitContext(cwd);
+    ensureAgentContext(db, { agentId, tool, repoPath: current.repoRoot || cwd, branch: current.branch });
     writeSnapshotThrottled(db);
   } catch {}
 }, HB_THROTTLE_MS).unref();
