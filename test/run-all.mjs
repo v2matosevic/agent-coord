@@ -29,7 +29,7 @@ for (const f of tests) {
     // Claude session would otherwise resolve THAT session's name everywhere
     // (log-commit, pending-push, the MCP server) and pass or fail by accident.
     // Tests that exercise the env path set it explicitly.
-    env: { ...process.env, CLAUDE_CODE_SESSION_ID: "", CLAUDECODE: "", CLAUDE_PID: "", AGENT_COORD_HOME: home, AGENT_COORD_NOTIFY: "0", AGENT_COORD_DIGEST: "0" },
+    env: { ...process.env, CODEX_THREAD_ID: "", CLAUDE_CODE_SESSION_ID: "", CLAUDECODE: "", CLAUDE_PID: "", AGENT_COORD_HOME: home, AGENT_COORD_NOTIFY: "0", AGENT_COORD_DIGEST: "0" },
   });
   // The test's pass/fail is already in `r.status`; cleanup is best-effort. On
   // Windows a just-exited child can hold the SQLite file a beat longer, so a bare

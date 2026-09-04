@@ -7,11 +7,21 @@ shared store. This is how you stay in sync instead of stepping on each other.
 
 ## What's automatic (you don't have to remember)
 
+These guarantees require the installed Claude hooks or **trusted native Codex
+hooks**. Codex setup adds the handlers; review them in `/hooks` in a new session.
+Until then, call `announce_intent`, `claim_files` before every edit, and
+`read_messages` periodically. The git commit guard remains the fallback.
+Codex's `whoami` reports `coordinationMode: native-hooks` when the calling hook
+supplied its session context. See [Codex integration](./CODEX.md) for limits.
+
 - At session start you get a **room brief** in context: live peers + their tasks,
   the task board, standing decisions, waiting mail. You arrive informed — no
   tool calls needed.
 - Before any `Write`/`Edit`/`MultiEdit`, a hook **claims the file**. If another
   live agent holds it you get a **blocked tool call (exit 2)** naming the holder.
+- Codex `apply_patch` claims every added, changed, deleted, and renamed path
+  together. A blocked patch leaves no partial claims. Hooks and MCP tools use
+  the same session identity, even when multiple threads share an MCP connection.
 - **If you were blocked, you'll be told when it frees** — a `✅ "<path>" is free
   now` line arrives mid-turn the moment the holder releases / goes cold / dies.
   No blind retry loop needed: do other work and act when it arrives.
@@ -62,7 +72,7 @@ hear theirs. This is how you go from "avoid collisions" to actually coordinating
   alone for ~20 min", "API routes are done — safe to wire the UI now."
 - **Receive** automatically: unread messages from peers are injected into your
   context at the start of each turn (you'll see a `📬` block). `read_messages`
-  also pulls them on demand (this is the path Codex/other agents use). The backlog
+  also pulls them on demand (required when native hooks are absent). The backlog
   can span hours, so each message is tagged with whether its sender is **still
   live** (`from_live`; exited senders are flagged) — don't plan a hand-off to an
   agent that has already left. `list_active_agents` is the source of truth for who

@@ -40,7 +40,7 @@ Clone the repo, open it in your agent (Claude Code, Codex, Cursor, …), and pas
 > the health check, and tell me what's live and what I need to do next.**
 
 The agent follows the [`AGENTS.md`](./AGENTS.md) runbook — installs, verifies
-(`doctor` 9/9), and reports back. That's it.
+(`doctor` 10/10), and reports back. Codex hook trust is a separate step below.
 
 ```bash
 git clone https://github.com/v2matosevic/agent-coord.git
@@ -59,13 +59,15 @@ or, on Windows (also builds the VS Code Fleet panel):
 ```
 
 Both are **idempotent** (safe to re-run) and **fail-soft** (skip a step if a CLI
-isn't installed). They wire Claude Code hooks + statusline, the global git
+isn't installed). They wire Claude and Codex hooks, Claude's statusline, the global git
 pre-commit net, and the MCP server into Claude and Codex, then run the health
 check. **Requires Node ≥ 22.** Open new agent sessions afterward to pick it up.
+In Codex, review/trust the new hooks in `/hooks`. Until trusted, use MCP claims
+and message polling. See [Codex integration](./docs/CODEX.md).
 
 Verify any time:
 ```bash
-node cli/doctor.mjs        # expect: 9/9 checks passed
+node cli/doctor.mjs        # expect: 10/10 configuration checks passed
 ```
 
 ---
@@ -75,7 +77,7 @@ node cli/doctor.mjs        # expect: 9/9 checks passed
 | Agent | What it gets |
 |---|---|
 | **Claude Code** | Full enforcement — a `PreToolUse` hook claims the file you're about to edit or **blocks it (`exit 2`)** if a peer holds it. Bash guard reserves dev port / DB / deploy. Statusline shows the fleet **and your own identity**. MCP tools for active coordination. |
-| **Codex** | MCP awareness + model-invoked claims; enforced at commit by the global pre-commit net. |
+| **Codex** | Trusted native hooks claim all patch paths, guard recognized shell writes/resources, and deliver peer messages between local tool calls. Hooks and MCP share session identity. Without hooks, use MCP claims and polling plus the commit guard. |
 | **Any committer** (Codex / Cursor / Aider / manual) | The **global git pre-commit** rejects a commit that stages a file another live agent is actively editing. |
 
 ### How it works
@@ -84,7 +86,7 @@ node cli/doctor.mjs        # expect: 9/9 checks passed
 flowchart LR
     subgraph agents [Agents on one machine]
         CC["Claude Code<br/>(hooks: pre-write block)"]
-        CX["Codex / Cursor / …<br/>(MCP awareness)"]
+        CX["Codex hooks + MCP<br/>Other clients: MCP awareness"]
         GIT["Any committer<br/>(global git pre-commit net)"]
     end
     STORE[("~/.agent-coord<br/>SQLite (WAL)<br/>presence · leases · messages · tasks")]
@@ -276,9 +278,10 @@ worktree-per-agent setup still shares ports, DBs, and pushes.
 
 ## Honest limits
 
-Coordination is advisory-by-default; the only **hard** blocks are Claude Code
+Coordination is advisory-by-default; the **hard** blocks are Claude Code or trusted Codex
 `PreToolUse` (pre-write) and the git pre-commit hook (at commit, every committer).
-Non-Claude agents get awareness via MCP + the commit net, not pre-write blocking.
+Clients without native hooks get awareness via MCP and the commit net. Codex
+hooks do not cover hosted tools or arbitrary scripts; shell parsing is heuristic.
 Locks are whole-file. A single-user machine is assumed — there's no auth boundary
 in the store. See [`DESIGN.md` §9](./DESIGN.md) for the full list.
 

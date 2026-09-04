@@ -1,5 +1,6 @@
 // MCP tool catalog. Plain JSON Schema (no zod in our code). The server process
-// is itself one agent, so tools don't take an agent_id — it knows who it is.
+// supplies a default identity. Codex hooks attach request-local session metadata
+// so threads sharing a transport never rename one another.
 
 const strArr = { type: "array", items: { type: "string" } };
 
@@ -213,3 +214,16 @@ export const TOOL_DEFS = [
     },
   },
 ];
+
+// Adapter metadata, injected by Codex hooks rather than authored by the model.
+for (const def of TOOL_DEFS) {
+  def.inputSchema.properties._coord = {
+    type: "object",
+    description: "Reserved for the native Codex hook; omit in model-authored calls.",
+    properties: {
+      session_id: { type: "string" }, cwd: { type: "string" },
+      agent_id: { type: "string" }, agent_type: { type: "string" },
+    },
+    required: ["session_id", "cwd"],
+  };
+}

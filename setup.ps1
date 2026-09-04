@@ -24,6 +24,7 @@ Write-Host "`n[3/6] global git pre-commit"
 
 # 4. Codex MCP server (if codex is installed) — remove-then-add for idempotency
 Write-Host "`n[4/6] Codex MCP"
+& $node $flag "$root/cli/install-codex-hooks.mjs"
 if (Get-Command codex -ErrorAction SilentlyContinue) {
   & codex mcp remove agent-coord 2>$null | Out-Null
   & codex mcp add agent-coord -- $node $flag "$root/mcp/server.mjs" --tool codex

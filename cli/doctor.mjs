@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { getDb, DB_PATH, DEGRADED_FLAG, writeTxn } from "../lib/store.mjs";
 import { COORD_HOME } from "../lib/identity.mjs";
+import { codexHooks, CODEX_EVENTS } from "../lib/codex-install.mjs";
 
 // Health check for the whole install. Each probe is isolated so one failure
 // doesn't hide the rest.
@@ -41,14 +42,17 @@ try {
 
 try {
   const hp = execFileSync("git", ["config", "--global", "--get", "core.hooksPath"], { encoding: "utf8" }).trim();
-  add(!!hp && existsSync(join(COORD_HOME, "githooks", "pre-commit")), "global pre-commit (all repos)", hp || "unset");
+  const expected = join(COORD_HOME, "githooks");
+  const norm = (p) => process.platform === "win32" ? p.replace(/\\/g, "/").toLowerCase() : p;
+  add(norm(hp) === norm(expected) && existsSync(join(expected, "pre-commit")), "global pre-commit (all repos)", hp || "unset");
 } catch {
   add(false, "global pre-commit (all repos)", "core.hooksPath unset");
 }
 
 try {
-  const c = readFileSync(join(homedir(), ".codex", "config.toml"), "utf8");
-  add(/mcp_servers\."?agent-coord"?/.test(c), "Codex MCP server");
+  const c = readFileSync(join(process.env.CODEX_HOME || join(homedir(), ".codex"), "config.toml"), "utf8");
+  const section = c.split(/(?=^\[)/m).find((s) => /^\[mcp_servers\.(?:"agent-coord"|'agent-coord'|agent-coord)\]/.test(s));
+  add(!!section && !/^\s*enabled\s*=\s*false/m.test(section) && /server\.mjs/.test(section), "Codex MCP server configured");
 } catch {
   add(false, "Codex MCP server", "no ~/.codex/config.toml");
 }
@@ -61,6 +65,18 @@ try {
 
 add(existsSync(join(ROOT, "mcp", "server.mjs")), "MCP server file");
 add(existsSync(join(ROOT, "node_modules", "@modelcontextprotocol", "sdk")), "MCP SDK installed");
+
+try {
+  const file = join(process.env.CODEX_HOME || join(homedir(), ".codex"), "hooks.json");
+  const installed = JSON.parse(readFileSync(file, "utf8"));
+  const wanted = codexHooks(ROOT);
+  const missing = CODEX_EVENTS.filter((event) => !(installed.hooks?.[event] || []).some((g) =>
+    (!g.matcher || g.matcher === "*" || g.matcher === ".*") && (g.hooks || []).some((h) =>
+      h.type === "command" && h.command === wanted[event][0].hooks[0].command && h.enabled !== false)));
+  add(!missing.length, "Codex hooks configured (trust/runtime not verified)", missing.length ? "missing: " + missing.join(", ") : file);
+} catch (e) {
+  add(false, "Codex hooks configured", e.message);
+}
 
 for (const c of checks) console.log(`${c.ok ? "✅" : "❌"} ${c.label}${c.detail ? "  — " + c.detail : ""}`);
 const failed = checks.filter((c) => !c.ok).length;

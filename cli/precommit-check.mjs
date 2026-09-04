@@ -1,15 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { getDb, nowIso, isoAgoMs } from "../lib/store.mjs";
 import { DEAD_MS, FILE_ACTIVE_MS } from "../lib/config.mjs";
 import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { readCommitterMarker } from "../lib/committer.mjs";
 import { sessionAnchorPids, readSessionLinkAny } from "../lib/session-link.mjs";
 import { baseAgentId, agentIdFromEnv } from "../lib/identity.mjs";
-
-// This script's own sibling — so the hint below points at the real release.mjs
-// wherever the project lives, not a hardcoded path.
-const RELEASE = fileURLToPath(new URL("./release.mjs", import.meta.url)).replace(/\\/g, "/");
 
 // The universal cross-agent net. Runs as a git pre-commit hook (any committer:
 // Claude, Codex, Cursor, Aider, manual). Blocks the commit (exit 1) if a staged
@@ -22,10 +17,12 @@ function git(args) {
 
 try {
   const repoRoot = git(["rev-parse", "--show-toplevel"]);
-  const staged = git(["diff", "--cached", "--name-only"]).split(/\r?\n/).filter(Boolean);
+  const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--no-renames", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean);
   if (!staged.length) process.exit(0);
 
-  const self = readCommitterMarker(repoRoot) || "__none__";
+  // A peer's per-repo marker must not override this process's exact identity.
+  const fromEnv = agentIdFromEnv();
+  const self = fromEnv || readCommitterMarker(repoRoot) || "__none__";
   const ws = workspaceId(repoRoot);
   const db = getDb();
   const stmt = db.prepare(
@@ -56,15 +53,11 @@ try {
     // (Field report i-3eeb7ef8: an agent's own shell-claimed .gitignore lease
     // blocked its own commit.)
     let linked = null;
-    try {
-      linked = readSessionLinkAny(sessionAnchorPids());
-    } catch {}
+    if (!fromEnv) {
+      try { linked = readSessionLinkAny(sessionAnchorPids()); } catch {}
+    }
     // Cheapest and exact: the session id Claude exported to the process that ran
     // `git commit` (see cli/log-commit.mjs).
-    let fromEnv = null;
-    try {
-      fromEnv = agentIdFromEnv();
-    } catch {}
     const selfBases = new Set([self, linked, fromEnv].filter((x) => x && x !== "__none__").map(baseAgentId));
     conflicts = conflicts.filter((c) => !selfBases.has(baseAgentId(c.agent_id)));
   }
@@ -72,7 +65,7 @@ try {
   if (conflicts.length) {
     process.stderr.write("\n⛔ agent-coord: commit blocked — staged files are held by other live agents:\n");
     for (const c of conflicts) process.stderr.write(`   • ${c.path}  (held by ${c.agent_id}${c.current_task ? " — " + c.current_task : ""})\n`);
-    process.stderr.write(`   Coordinate, or force-release:  node "${RELEASE}" --file <path>\n\n`);
+    process.stderr.write("   Coordinate with the holder or wait for the lease to go cold. Do not force-release a live peer.\n\n");
     process.exit(1);
   }
   process.exit(0);

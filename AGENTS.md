@@ -31,7 +31,7 @@ This is idempotent and fail-soft. It will:
 1. `npm install` (only the MCP server needs deps).
 2. Install Claude Code hooks + statusline into `~/.claude/settings.json` (merged, backed up — never clobbers existing hooks).
 3. Install a **global** git pre-commit/post-commit net via `git config --global core.hooksPath` (fails open; chains to existing repo hooks).
-4. Register the MCP server with `claude` and `codex` if those CLIs are on PATH.
+4. Install Codex lifecycle/file/message hooks into `~/.codex/hooks.json` (or `$CODEX_HOME`), preserving existing handlers, and register MCP with available CLIs.
 5. Run the health check.
 
 **Windows alternative** (also builds the VS Code Fleet panel + sets `AGENT_COORD_ROOT`):
@@ -47,7 +47,7 @@ it skips and reports. Don't fight it.
 ```bash
 node cli/doctor.mjs
 ```
-Expect **`9/9 checks passed`**. If a check fails, read its line — common causes:
+Expect **`10/10 checks passed`**. Hook configuration is checked, not Codex trust or runtime delivery. If a check fails, read its line — common causes:
 - *Claude MCP server* / *Codex MCP server* failing → that CLI isn't installed (OK to leave; note it to the human).
 - *store writable* failing → the store dir (`~/.agent-coord`) isn't writable, or is on a network/OneDrive-synced path (it must be a local disk).
 
@@ -62,9 +62,10 @@ for t in concurrency cold-lease overlap session-link messages precommit liveness
 ## 3. Report back to the human
 
 Tell them, concisely:
-- ✅ installed (doctor N/9) and which integrations are live (Claude hooks? Claude MCP? Codex MCP?).
+- Installed (doctor N/10), which integrations are configured, and which are verified running.
 - ⚠️ anything skipped (e.g. "Codex CLI not found — skipped its MCP wiring").
 - **Action they must take:** *open NEW agent sessions/terminals* — existing sessions won't pick up the hooks until restarted.
+- Codex requires review/trust of new or changed hooks in `/hooks`. Never edit its trust store or bypass that review. Until trusted, use MCP check-ins, file claims and message polling.
 - One line on what they now have: "Your agents now see each other, lock files they're editing, and a global pre-commit blocks committing a file another live agent holds."
 
 ## 4. What you (and every agent) should DO once it's running
@@ -88,6 +89,7 @@ The short version:
 ## 5. What it changes on the machine (so you can explain / reverse it)
 
 - `~/.claude/settings.json` — adds hooks + a statusline (backup written alongside).
+- `~/.codex/hooks.json` (or `$CODEX_HOME/hooks.json`) adds native Codex hooks, with a backup. Remove only handlers marked `x-agent-coord` to uninstall them.
 - `git config --global core.hooksPath` → `~/.agent-coord/githooks` (prior value saved to `~/.agent-coord/git-hookspath.prior`).
 - `~/.claude.json` / Codex config — adds the `agent-coord` MCP server.
 - Creates the store at `~/.agent-coord/` (SQLite). Single-user machine assumed; no secrets stored.
@@ -98,7 +100,7 @@ agent-coord`; restore a `~/.claude/settings.json.bak.*`; delete `~/.agent-coord/
 
 ## 6. Honest limits (don't oversell it to the human)
 
-Hard enforcement is two points only: Claude Code `PreToolUse` (pre-write block)
+Hard enforcement is two points only: Claude Code or trusted Codex `PreToolUse` (pre-write block)
 and the **git pre-commit** net (every committer, at commit). Everything else is
-advisory awareness + commit-time catch. Locks are whole-file. It assumes a
+advisory awareness + commit-time catch. Codex hooks cover native patches and recognized shell writes, not hosted tools or arbitrary scripts. Locks are whole-file. It assumes a
 single-user machine (no auth boundary in the store). See [`DESIGN.md` §9](./DESIGN.md).

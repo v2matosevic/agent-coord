@@ -34,19 +34,21 @@ if (has("claude")) {
   sh(["claude", "mcp", "add", "agent-coord", "--scope", "user", "--", NODE, FLAG, server, "--tool", "claude-code"]);
 } else console.log("  claude CLI not on PATH — skipped (hooks still cover Claude Code)");
 
-console.log("\n[5/6] Codex MCP server");
+console.log("\n[5/6] Codex hooks + MCP server");
+sh([NODE, FLAG, join(ROOT, "cli", "install-codex-hooks.mjs")]);
 if (has("codex")) {
   spawnSync("codex mcp remove agent-coord", { shell: true, stdio: "ignore" });
   sh(["codex", "mcp", "add", "agent-coord", "--", NODE, FLAG, server, "--tool", "codex"]);
 } else console.log("  codex CLI not on PATH — skipped");
 
 console.log("\n[6/6] health check");
-sh([NODE, FLAG, join(ROOT, "cli", "doctor.mjs")]);
+const healthy = sh([NODE, FLAG, join(ROOT, "cli", "doctor.mjs")]);
 
 if (process.platform === "darwin") {
   console.log("\n[macOS] menu-bar fleet plugin (SwiftBar/xbar)");
   sh([NODE, FLAG, join(ROOT, "cli", "install-macos-menubar.mjs")]);
 }
 
-console.log("\nDone. Open NEW agent sessions/terminals to pick it up.");
+console.log(healthy ? "\nConfigured. Open NEW sessions; review/trust Codex hooks in /hooks." : "\nSetup finished with failed health checks. Resolve the failures above before relying on coordination.");
 console.log("Verify any time:  node", q(join(ROOT, "cli", "doctor.mjs")));
+if (!healthy) process.exitCode = 1;

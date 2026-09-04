@@ -3,6 +3,27 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.9.0: native Codex coordination
+
+Codex sessions can now receive peer messages between local tool calls and stop
+before overwriting files held by a live peer. Setup installs native lifecycle
+hooks with backups; Codex requires user review/trust before running them.
+
+- Patch guards claim all add/update/delete/rename paths atomically, preserving
+  existing leases when any path is blocked. Recognized shell mutations and
+  shared resources use the same coordination store.
+- Hooks pass session/workspace context to MCP per request. Shared transports
+  cannot rename other threads; idle unopened tool connections create no agents.
+  CODEX_THREAD_ID is recognized when supplied, including by git hooks.
+- MCP-only presence stays alive during other tool work. Native session claims
+  survive MCP reconnects. Neither mechanism renews file warmth in the background.
+- A foreign commit marker cannot override the committing session's identity.
+  Staged paths use NUL delimiters and include both rename endpoints.
+- Doctor checks the actual global hook destination and Codex hook configuration.
+  It explicitly distinguishes configured hooks from trusted/running hooks.
+- Isolated regression coverage uses native event fixtures, real stdio MCP and
+  temporary git repositories. See docs/CODEX.md for activation and limits.
+
 ## v1.8.0 — one session, one name, however the server was spawned
 
 Fifteen field reports from three repos over five weeks, all one bug. A Claude
