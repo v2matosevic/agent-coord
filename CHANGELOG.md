@@ -3,6 +3,27 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Unreleased: identity isolation, native deny delivery and contention evidence
+
+- Exhausting the 64-name pool now uses a stable session suffix instead of
+  impersonating another agent. Existing names no longer recycle into old
+  mailboxes and commit history. Both tiers use one resolver; restart old MCP
+  processes to load it. Unlinked standalone MCP connections warn explicitly.
+- Codex conflicts return the documented structured deny. PowerShell mapped
+  native exit 2 to exit 1, causing the host to continue after a recorded conflict.
+  This builds on 8876633 without changing installed hook definitions or trust.
+- Per-file wait episodes, retry counts and duration are available through
+  `node cli/contention.mjs --here --json`. Holder observations distinguish
+  in-flight recognized write commands, reservations, and legacy unknown state.
+- Live holders receive budgeted, deduplicated waiter notices at context events.
+  No lease is unlocked by a notice. Expiry, cancellation, abandoned waiters,
+  concurrent retries, atomic rollback and seven-day history retention are tested.
+- Opt-in `scripts/native-codex-smoke.py` drives two actual Codex sessions using
+  already approved profile trust and deterministic localhost tool responses.
+  See [continuation evidence](docs/VALIDATION-2026-09-05.md) for scope and limits.
+
+These changes are not in the immutable v1.9.0 tag or its draft source assets.
+
 ## v1.9.0: native Codex coordination
 
 Codex sessions can now receive peer messages between local tool calls and stop

@@ -18,7 +18,8 @@ supplied its session context. See [Codex integration](./CODEX.md) for limits.
   the task board, standing decisions, waiting mail. You arrive informed — no
   tool calls needed.
 - Before any `Write`/`Edit`/`MultiEdit`, a hook **claims the file**. If another
-  live agent holds it you get a **blocked tool call (exit 2)** naming the holder.
+  live agent holds it you get a **blocked tool call** naming the holder
+  (Claude exit 2; Codex structured deny).
 - Codex `apply_patch` claims every added, changed, deleted, and renamed path
   together. A blocked patch leaves no partial claims. Hooks and MCP tools use
   the same session identity, even when multiple threads share an MCP connection.
@@ -46,7 +47,7 @@ supplied its session context. See [Codex integration](./CODEX.md) for limits.
    were about to touch, **pick different work or coordinate** — don't duplicate
    or contradict them. (Claude also captures your task from the prompt, and gets
    the same brief free at session start.)
-2. **Respect a block — but it self-heals.** An `exit 2` means a peer is
+2. **Respect a block — but it self-heals.** A coordination denial means a peer is
    *actively* editing that file right now (a lock goes **cold** and stops
    blocking a few minutes after the holder moves on — so abandoned files free
    themselves; you never need to force-release a stale lock or ask the human to

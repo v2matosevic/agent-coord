@@ -38,6 +38,14 @@ require review in Codex. Setup does not modify trust or approval settings.
   hooks and survive an MCP reconnect.
 - An ended native session releases its own claims. Missing lifecycle events
   retain the existing expiry fallback.
+- Short names remain attached to their recorded owners. After the 64-name pool
+  fills, new identities add a stable 16-hex session suffix. Names are no longer
+  recycled because mailbox and commit records outlive presence. A pre-fix MCP
+  process can still return a collided name until restarted. Compare the opaque
+  `sessionId` and resolved name in both MCP and shell, not just the display name.
+- Hook review is scoped to the effective Codex configuration/profile. Approval
+  in one named profile does not establish approval in another profile. Use
+  `/hooks` in the profile that will actually run the task.
 
 ## Protection and limits
 
@@ -52,7 +60,10 @@ or every shell construct. Hosted tools do not run these local hooks.
 
 The hook only returns an allow/rewrite result for this integration's own MCP
 calls. It never returns an allow decision for shell commands or file edits.
-Known conflicts return exit 2. Store or adapter errors fail open with a visible
+Known conflicts return a structured `permissionDecision: deny` with exit 0.
+PowerShell can map a native exit 2 to shell exit 1, which Codex treats as a
+non-blocking hook failure. The structured deny survives that shell boundary.
+Store or adapter errors fail open with a visible
 degraded warning, consistent with the existing system.
 
 The git guard prefers the committing process's session identity over a recent
@@ -93,3 +104,23 @@ must report distinct identities and `coordinationMode: native-hooks`.
 This step uses the actual host hook dispatcher. An isolated fixture passing the
 same JSON to the hook script does not replace it. Do not bypass hook trust for
 the check. Hosted web search does not count as a local tool call.
+
+An opt-in native driver is also available:
+
+```text
+python scripts/native-codex-smoke.py --profile <already-approved-profile>
+```
+
+It starts two fresh installed CLI sessions in a disposable git repository. A
+localhost backend supplies deterministic tool calls; Codex itself dispatches
+shell, MCP and patch calls and their hooks. Hook inputs are never injected by
+the test. The driver neither copies nor changes hook trust, leaves the global
+git guard enabled, isolates both hook and MCP stores explicitly, and retains
+local evidence outside the checkout. The existing profile selects native model
+tool metadata; no request goes to a remote model. Current driver support is the
+Codex code-mode tool surface exercised in the validation record.
+
+See [2026-09-05 validation](VALIDATION-2026-09-05.md). That record establishes
+delivery in the tested approved profile, not universal approval or reliability
+for every installed client. A database failure still uses the documented
+degraded/expiry behavior; native MCP reconnect is separately untested.

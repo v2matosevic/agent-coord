@@ -12,6 +12,7 @@ import { overlapHardBlock, earlierOverlappingPeers } from "../lib/overlap.mjs";
 import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
 import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
+import { finishFileOperation } from "../lib/contention.mjs";
 
 // PreToolUse (default) on Write|Edit|MultiEdit|NotebookEdit: claim the file, or
 // exit 2 to block when another live agent holds it. PostToolUse (--post): just
@@ -53,6 +54,7 @@ try {
     // rides this same mode (a stuck-retrying agent must stay visible and
     // reachable), but a failed tool didn't edit anything — don't log one.
     const failed = input.hook_event_name === "PostToolUseFailure";
+    finishFileOperation(db, { agentId, operationId: input.tool_use_id });
     if (fp && !failed) logActivity(db, { agentId, workspaceId: ws, event: "edit", detail: canonicalFilePath(fp, repoRoot) });
     writeSnapshotThrottled(db); // keeps ~/.agent-coord/snapshot.json live for sessions with no statusline (ADE tiles)
     // Mid-turn delivery: surface peer messages, freed files we were blocked on,
@@ -94,7 +96,7 @@ try {
     process.exit(2);
   }
 
-  const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: input.tool_name });
+  const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: input.tool_name, operationId: input.tool_use_id });
   if (!res.granted) {
     enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
     logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });

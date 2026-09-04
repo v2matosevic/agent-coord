@@ -73,7 +73,7 @@ try {
     // releases. Only in a real repo (a room); relative targets resolve against
     // the command's cwd (often a subdir, not the root).
     for (const path of repoRoot ? detectWriteTargets(command, repoRoot, cwd) : []) {
-      const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: "bash-write" });
+      const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: "bash-write", operationId: input.tool_use_id });
       if (!res.granted) {
         enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
         logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });

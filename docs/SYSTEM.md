@@ -24,6 +24,13 @@ claims for a native operation are atomic, and repository changes update presence
 even inside the heartbeat throttle window. Hosted tools and arbitrary scripts
 remain outside guaranteed pre-write coverage.
 
+Post-v1.9.0 main also uses collision-resistant overflow identities, explicit
+Codex JSON denials across the PowerShell boundary, and additive contention
+history/holder notices. The 2026-09-05 [validation record](VALIDATION-2026-09-05.md)
+is the current verification checkpoint; historical counts below describe their
+original checkpoints. [Contention semantics](CONCURRENT-EDITING.md) distinguish
+wait episodes from retries and in-flight commands from idle reservations.
+
 The operator runs many AI coding agents at once — several Claude Code terminals in one
 VS Code window on one repo, plus more across other windows/repos, plus Codex.
 Each agent process is an island with zero shared state, so they: edit the same
@@ -285,8 +292,8 @@ message jumping 15 broadcasts, backlog drains to zero, empty inbox silent, room
 brief clamped), `mcp-args` (the arg-normalization
 boundary: field-reported missing/misnamed required fields fail friendly, every
 coercion SQL-bindable), `identity-names` (claimed
-single-word names: stability, 50-session uniqueness, pool exhaustion, stale
-recycle), `search` (FTS5: backfill, trigger sync, scoping, kind filter,
+short names: stability, 160-session uniqueness, suffixed overflow, preserved
+stale ownership), `search` (FTS5: backfill, trigger sync, scoping, kind filter,
 punctuation-proof queries, delete cleanup), `issues` (cross-project log: report/
 title-required, global vs workspace scope, severity ordering + proto-key rejection,
 resolve/reopen/wontfix stamps, stats, basename-collision grouping + export naming,

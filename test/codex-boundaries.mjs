@@ -1,6 +1,10 @@
 // Boundaries a happy-path hook fixture misses: no partial shell claims, cwd
 // outside the session repo, and files not yet created through a directory alias.
 import assert from "node:assert/strict";
+const assertDenied = (result, label = "") => {
+  assert.equal(result.status, 0, label + result.stderr);
+  assert.equal(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision, "deny", label);
+};
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -35,13 +39,13 @@ try {
   claimResource(db, { agentId: "peer", resourceId: "port:41234" });
   check("denied shell operation leaves no file claims", () => {
     const result = hook({ tool_name: "Bash", tool_input: { command: "npm run dev -- --port 41234 > src/server.log" } });
-    assert.equal(result.status, 2, result.stderr);
+    assertDenied(result, result.stderr);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM file_leases WHERE agent_id=?").get(id).n, 0);
   });
   claimFile(db, { agentId: "peer", workspaceId: workspaceId(two), repoPath: two, path: "src/held.ts" });
   check("workdir in another repo honors that repo's peer claims", () => {
     const result = hook({ tool_name: "Bash", tool_input: { command: "echo changed > src/held.ts", workdir: two } });
-    assert.equal(result.status, 2, result.stderr);
+    assertDenied(result, result.stderr);
   });
   check("fleet follows a changed working directory without waiting for heartbeat expiry", () => {
     assert.equal(hook({ tool_name: "Bash", tool_input: { command: "git status", workdir: two } }).status, 0);

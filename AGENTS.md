@@ -77,7 +77,7 @@ The short version:
 - **Announce intent:** call `announce_intent` with your task. It warns you if a
   peer is already doing similar work — if you started later, narrow your lane or
   hand off; **don't build the same thing twice.**
-- **You'll be auto-blocked** (`exit 2`) from editing a file a peer is *actively*
+- **You'll be auto-blocked** (Claude exit 2; Codex structured deny) from editing a file a peer is *actively*
   editing. Don't force it or ask the human to unlock — it auto-frees within a few
   minutes when they move on; edit elsewhere and retry, or `post_message` them.
 - **You hear peers mid-turn:** unread messages appear between your tool calls (a

@@ -1,5 +1,9 @@
 // Native hook fixtures + real stdio MCP + real git staging in isolated stores.
 import assert from "node:assert/strict";
+const assertDenied = (result, label = "") => {
+  assert.equal(result.status, 0, label + result.stderr);
+  assert.equal(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision, "deny", label);
+};
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -53,32 +57,32 @@ try {
   assert.notEqual(idA, idB);
   good(prePatch(a, update("src/held.ts")));
   const denied = prePatch(b, update("src/held.ts"));
-  assert.equal(denied.status, 2);
+  assertDenied(denied);
   assert.ok(denied.stderr.includes(idA));
   good(prePatch(a, update("src/held.ts"))); // own hook lease never conflicts
   const batch = `*** Begin Patch\n*** Add File: src/free.ts\n+new\n*** Update File: src/held.ts\n@@\n-old\n+new\n*** End Patch`;
-  assert.equal(prePatch(b, batch).status, 2);
+  assertDenied(prePatch(b, batch));
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM file_leases WHERE agent_id=?").get(idB).n, 0, "denied patch leaves no partial claims");
   good(prePatch(b, update("src/own.ts")));
   const ownBefore = db.prepare("SELECT * FROM file_leases WHERE agent_id=?").get(idB);
-  assert.equal(prePatch(b, batch.replace("src/free.ts", "src/own.ts")).status, 2);
+  assertDenied(prePatch(b, batch.replace("src/free.ts", "src/own.ts")));
   assert.deepEqual(db.prepare("SELECT * FROM file_leases WHERE agent_id=?").get(idB), ownBefore, "rollback preserves an existing lease exactly");
   const rename = "*** Begin Patch\n*** Update File: src/old.ts\n*** Move to: src/held.ts\n@@\n-old\n+new\n*** End Patch";
   assert.deepEqual(patchTargets({ command: rename }), ["src/old.ts", "src/held.ts"]);
-  assert.equal(prePatch(b, rename).status, 2, "rename destination protected");
-  assert.equal(prePatch(b, "*** Begin Patch\n*** Delete File: src/held.ts\n*** End Patch").status, 2);
+  assertDenied(prePatch(b, rename), "rename destination protected");
+  assertDenied(prePatch(b, "*** Begin Patch\n*** Delete File: src/held.ts\n*** End Patch"));
   good(prePatch({ ...a, cwd: join(work, "src") }, update("relative.ts")));
   assert.ok(db.prepare("SELECT 1 FROM file_leases WHERE agent_id=? AND path='src/relative.ts'").get(idA));
   const shellBlock = hook(b, "PreToolUse", { tool_name: "Bash", tool_input: { command: 'echo changed > "src/held.ts"' } });
-  assert.equal(shellBlock.status, 2, shellBlock.stderr);
+  assertDenied(shellBlock, shellBlock.stderr);
   const readOnly = good(hook(a, "PreToolUse", { tool_name: "Bash", tool_input: { command: "git status" } }));
   assert.equal(readOnly, null, "shell hook never forces permissionDecision allow");
   good(hook(a, "PreToolUse", { tool_name: "Bash", tool_input: { command: "npm run dev -- --port 43219" } }));
-  assert.equal(hook(b, "PreToolUse", { tool_name: "Bash", tool_input: { command: "npm run dev -- --port 43219" } }).status, 2, "native shell resource conflict");
+  assertDenied(hook(b, "PreToolUse", { tool_name: "Bash", tool_input: { command: "npm run dev -- --port 43219" } }), "native shell resource conflict");
   const child = { ...a, agent_id: "child-abcdef", agent_type: "worker" };
   assert.equal(hook(child, "SubagentStart").status, 0);
   good(prePatch(child, update("src/child.ts")));
-  assert.equal(prePatch(a, update("src/child.ts")).status, 2, "child and parent edits remain distinct");
+  assertDenied(prePatch(a, update("src/child.ts")), "child and parent edits remain distinct");
   good(hook(a, "SubagentStop")); // missing child id cannot end the parent
   assert.equal(db.prepare("SELECT status FROM agents WHERE agent_id=?").get(idA).status, "active");
   good(hook(child, "SubagentStop"));

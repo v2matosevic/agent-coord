@@ -1,6 +1,6 @@
 // Single-word name claiming: stable per session, unique across live sessions
 // (the property pure hashing can't give from a 64-word pool), pool-exhaustion
-// fallback, and stale-claim recycling.
+// suffix fallback, and preservation of stale owners.
 import { mkdtempSync, readdirSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,18 +23,17 @@ const names = new Set();
 for (let i = 0; i < 50; i++) names.add(agentIdFromSession("burst-" + i));
 checks["50 sessions -> 50 distinct names"] = names.size === 50 && names.has(a) === false;
 
-// 3) Pool exhausted -> deterministic fallback still returns a pool word.
+// 3) Pool exhausted -> stable suffix instead of another session's mailbox key.
 for (let i = 50; i < POOL + 5; i++) agentIdFromSession("burst-" + i); // fill the rest
 const overflow = agentIdFromSession("the-65th-session");
-checks["exhausted pool falls back to a pool word"] = /^[a-z]+$/.test(overflow);
+checks["exhausted pool uses a session suffix"] = /^[a-z]+-[a-f0-9]{16}$/.test(overflow);
 
-// 4) Stale claims recycle: age every claim past the TTL, then a new session
-//    claims (steals) a name again instead of falling back.
+// 4) Old mail and provenance outlive liveness: stale names cannot be recycled.
 const dir = join(COORD_HOME, "names");
 const old = new Date(Date.now() - 25 * 3600 * 1000);
 for (const f of readdirSync(dir)) utimesSync(join(dir, f), old, old);
 const fresh = agentIdFromSession("after-the-flood");
-checks["stale claims recycle"] = /^[a-z]+$/.test(fresh) && agentIdFromSession("after-the-flood") === fresh;
+checks["stale owners are preserved"] = /^[a-z]+-[a-f0-9]{16}$/.test(fresh) && agentIdFromSession("session-A") === a;
 
 let ok = true;
 for (const [k, v] of Object.entries(checks)) {

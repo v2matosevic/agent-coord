@@ -10,6 +10,26 @@ Read the applicable AGENTS.md, global working rules and shared/project memory.
 Check the current checkout, fleet, messages and issue log before editing. This
 record is a historical checkpoint; current code and new evidence take priority.
 
+## Continuation, September 5
+
+Read [the continuation validation record](VALIDATION-2026-09-05.md) before the
+historical priorities below. Identity-pool exhaustion was reproduced and fixed;
+actual trusted native dispatch exposed and then verified a further PowerShell
+deny-delivery fix on top of 8876633. The two-session driver passed 21 checks.
+Per-file contention measurements and deduplicated holder notices are now
+implemented on main after v1.9.0, with additive schema changes and unchanged
+locking timeouts/exclusivity. Atomic named handoff remains deferred.
+
+The running MCP process in an old session can still use the pre-fix resolver.
+Restart it before trusting its identity. Hook trust is profile-scoped; the
+tested approved profile does not establish approval elsewhere. One storage
+error during a concurrent shutdown test remains tracked as i-8578246d.
+Native MCP reconnect remains untested, distinct from isolated stdio coverage.
+
+The tag and existing source assets have not moved. The release remains a draft
+pending a newly tested release revision and the operator's publication decision.
+The remainder of this file preserves the earlier checkpoint for provenance.
+
 The first next-session priority is the identity mismatch discovered during
 wrap-up, followed by actual trusted Codex host validation. Do not treat green
 fixtures as proof that the current host connection uses the intended identity.

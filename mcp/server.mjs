@@ -28,9 +28,8 @@ import { TOOL_DEFS } from "./tool-defs.mjs";
 import { normalizeArgs } from "./args.mjs";
 import { readFileSync } from "node:fs";
 
-// One stdio MCP server == one agent (clients spawn it per session). This is how
-// non-Claude agents (Codex, etc.) get coordination: awareness + model-invoked
-// claims. Enforcement for them is the git pre-commit net, not pre-write blocks.
+// A transport may serve several native sessions. Only request-local hook
+// context or a host-provided environment session id establishes that identity.
 
 const argFlag = (f) => {
   const i = process.argv.indexOf(f);
@@ -150,6 +149,11 @@ function handle(name, a, context) {
           "identity not linked to this session's hooks — your file locks and commits may be recorded under a " +
           "different agent name than this. Check get_global_state for a same-repo twin holding 'your' files, and " +
           "run cli/doctor.mjs. If you just started, retry in a moment (the link may still be landing).";
+      }
+      if (basis === "standalone" && tool !== "claude-code") {
+        me.warning = "No host session identity reached this MCP connection. Its standalone identity may differ from shell/git hooks; " +
+          "a shared transport cannot distinguish callers. Review hooks in /hooks in the active profile and start a fresh session. " +
+          "Compare whoami.sessionId with the shell CODEX_THREAD_ID before claiming files.";
       }
       return me;
     }
@@ -414,12 +418,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     const hookContext = a._coord === undefined ? null : codexContext(a._coord);
     if (hookContext && !usingHookContext) {
-      // Discard only an unused startup placeholder, never an identity that has
-      // already done real work. Hook identities belong to their session lifecycle.
-      if (!adopted && !defaultUsed && hookContext.agentId !== agentId) {
-        releaseAllForAgent(db, agentId);
-        markDead(db, agentId);
-      }
+      // An unused placeholder has no claims to clean up. Old servers could have
+      // collided with a real owner when the name pool filled; never release a
+      // name merely because it was selected during connection startup.
       usingHookContext = true;
     }
     // If a Claude session started standalone (lost the SessionStart race / resumed),

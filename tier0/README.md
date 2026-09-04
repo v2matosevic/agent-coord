@@ -8,8 +8,9 @@ editing the same file.
 ## How it works
 
 - Each session gets a stable, speakable name (e.g. `fox`) — claimed from a
-  shared pool under `~/.agent-coord/names/` so no two live sessions share one,
-  with a deterministic hash pick as the fail-open fallback.
+  shared pool under `~/.agent-coord/names/`. Existing names keep their owners;
+  an exhausted/unavailable pool uses a session suffix instead of another
+  owner's name. Both tiers use `lib/name-claims.mjs` for the same resolution.
 - Hooks write/refresh one JSON file per agent under
   `%USERPROFILE%\.agent-coord\presence\<name>.json`.
 - The statusline reads that directory every refresh, shows the live fleet, and

@@ -37,13 +37,41 @@ those linked resources remain shared. A suggested port is not yet reserved.
 
 ## Next implementation priorities
 
-These are proposals, not implemented guarantees in v1.9.0.
+Current main, after v1.9.0, records wait episodes in additive `file_waits` and
+`file_wait_notices` tables. Read them with:
 
-- Add per-file wait duration and contention counts. Separate active editing
-  time from idle reservation time so tuning follows measured bottlenecks.
-- Notify the current holder of queued work, with deduplication and a concrete
-  request to finish a small edit and hand off. Give the holder a safe checkpoint;
-  do not automatically unlock a file halfway through a command.
+```text
+node cli/contention.mjs --here --json
+```
+
+A wait episode begins at the first denied claim by one agent for one file.
+Retries increment attempts within that episode. Counts include MCP and native
+claims. Wait duration ends when release or a successful acquisition is observed,
+or at the modeled lease/warmth/heartbeat expiry. Multiple waiters contribute
+separate waiter-milliseconds, not elapsed project time. Cancelled, abandoned
+and expired waits stay distinguishable. Reports are read-only, scoped by
+`--here`, and cover episodes begun in the last seven days. The opportunistic
+reaper removes completed history after seven days and closes expired episodes.
+
+Holder observations count whether a recognized write command was still in
+flight, no write command was in flight (a reservation), or an older writer
+provided no activity state. These are observations at blocked attempts, not
+CPU time or proof of actual bytes written. A failed command still ends its
+in-flight observation when the host delivers its completion. Missing post-tool
+events leave that observation uncertain until lease expiry or a later claim.
+
+Holder notices are delivered at later context events, at most three per event,
+only while both waiter and holder are live and the hold still blocks. Repeated
+retries share one notice; concurrent deliveries compete on a unique key. A
+notice omitted by the context budget remains pending. The request is to finish
+the running command and a coherent edit, then release at a safe point. No
+notice changes a lease, creates a reservation, or enables concurrent writes.
+
+These features are not present in the v1.9.0 tag. No measured throughput
+improvement is claimed. [Validation and limits](VALIDATION-2026-09-05.md).
+
+Still proposals:
+
 - Add explicit atomic handoff to a named, live waiter with bounded acceptance.
   Test stale waiters, crashed holders, competing claims and multi-file edits.
 - For coordinated patch submission, record a base content hash, validate it
