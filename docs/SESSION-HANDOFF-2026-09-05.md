@@ -12,6 +12,36 @@ record is a historical checkpoint; current code and new evidence take priority.
 
 ## Continuation, September 5
 
+### End-of-day checkpoint
+
+Marko requested documentation and wrap-up after accepting the completed work.
+No further implementation or release changes are part of this closeout.
+Documentation commit `112d097e5b1336418c55df4805423e311bab8af9` also passed
+[all six CI jobs](https://github.com/v2matosevic/agent-coord/actions/runs/33929269916).
+The final closeout edit only records that result and the next-session starting
+point; it does not change the tested implementation.
+
+The local evidence bundle is `.release/evidence-2026-09-05/` (git-ignored):
+the passing native summary, full final test log, failed-shutdown summary,
+original degraded flag, and read-only snapshots of the isolated native stores'
+agent, lease, wait and notice rows. It preserves the relevant evidence outside
+temporary folders without copying model request transcripts. Public evidence
+and limitations are in [the validation record](VALIDATION-2026-09-05.md).
+
+Resume with the shutdown storage failure i-8578246d and actual native reconnect
+validation. The original Claude identity report i-5cacb8b6 still needs its own
+reproduction. Keep native trust review intact, compare the fresh hook/shell/MCP
+session identities, and coordinate with active peers before editing. Existing
+sessions need restarting to load the corrected MCP resolver. Contention metrics
+and holder notices are finished; atomic named handoff remains future work.
+
+Release decision: keep the current draft unpublished. The existing v1.9.0 tag
+still points to `829aed4fc326767f1930a27903582a634541395e`; its assets lack these
+fixes. A future release requires a newly tested version and Marko's publication
+decision. Preserve `.social-post/`. No action is needed tonight.
+
+### Completed implementation
+
 Read [the continuation validation record](VALIDATION-2026-09-05.md) before the
 historical priorities below. Identity-pool exhaustion was reproduced and fixed;
 actual trusted native dispatch exposed and then verified a further PowerShell
