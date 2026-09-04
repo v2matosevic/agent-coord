@@ -28,6 +28,23 @@ Native MCP reconnect remains untested, distinct from isolated stdio coverage.
 
 The tag and existing source assets have not moved. The release remains a draft
 pending a newly tested release revision and the operator's publication decision.
+
+Implementation commit `99f3beb4a9b4a8cab5e4369fefbb981a0fd0e5fa` is pushed.
+Its [six CI jobs](https://github.com/v2matosevic/agent-coord/actions/runs/33928803209)
+passed on Windows, macOS and Linux with Node 22.16.0 and 24, including the source
+archive smoke. Local validation passed 48/48 test files, 21 actual trusted native
+checks and doctor 10/10. Structured push review returned `allClear: true` with
+no blockers; the exact one-commit range was inspected separately, and only that
+full SHA was pushed. `.social-post/` remains untouched and untracked.
+
+Issue i-6daec436 is resolved with the reproduced identity defect and native
+validation evidence. The original Claude nested-repository report i-5cacb8b6
+remains open because its process-ancestry scenario was not reproduced; its issue
+now links the related fix without assuming the same cause. Next work is to
+investigate the intermittent shutdown storage error, verify native reconnect,
+and restart old MCP sessions before trusting their resolver. Publication stays
+pending; the original v1.9.0 assets do not contain these fixes.
+
 The remainder of this file preserves the earlier checkpoint for provenance.
 
 The first next-session priority is the identity mismatch discovered during
