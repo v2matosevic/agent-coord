@@ -27,7 +27,7 @@ hooks with backups; Codex requires user review/trust before running them.
   Explicit shell work directories, directory aliases and newly created files
   resolve to the correct workspace. Fleet context refreshes during warm heartbeats.
 - Reinstalling preserves the original global git-hook rollback setting. Setup
-  checks SQLite availability before making changes; CI tests Node 22.13.0 and 24.
+  checks SQLite availability before making changes; CI tests Node 22.16.0 and 24.
 - Push review consistently uses the latest commit attribution, independent of
   SQLite query ordering. Release preparation and validation limits are documented.
 - Updated vulnerable transitive dependencies within compatible version ranges.

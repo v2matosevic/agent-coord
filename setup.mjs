@@ -17,10 +17,10 @@ const has = (cmd) => spawnSync(process.platform === "win32" ? "where" : "which",
 const server = join(ROOT, "mcp", "server.mjs");
 
 // Check the real runtime before npm or any machine-wide configuration changes.
-// node:sqlite was flag-gated before 22.13; a major-version check is insufficient.
-const runtime = spawnSync(NODE, [FLAG, "--input-type=module", "-e", "import { DatabaseSync } from 'node:sqlite'; const db = new DatabaseSync(':memory:'); db.close();"], { encoding: "utf8" });
+// SQLite import alone is insufficient: full-text search needs the FTS5 build flag.
+const runtime = spawnSync(NODE, [FLAG, "--input-type=module", "-e", "import { DatabaseSync } from 'node:sqlite'; const db = new DatabaseSync(':memory:'); db.exec('CREATE VIRTUAL TABLE runtime_fts USING fts5(content)'); db.close();"], { encoding: "utf8" });
 if (runtime.status !== 0) {
-  console.error("agent-coord requires Node 22.13+ (22.x) or Node 24+. Upgrade Node before setup; no configuration was changed.");
+  console.error("agent-coord requires Node 22.16+ (22.x) or Node 24+. Upgrade Node before setup; no configuration was changed.");
   process.exit(1);
 }
 

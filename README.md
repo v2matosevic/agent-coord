@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/v2matosevic/agent-coord/actions/workflows/ci.yml/badge.svg)](https://github.com/v2matosevic/agent-coord/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Node 22.13+ / 24+](https://img.shields.io/badge/node-22.13%2B%20%2F%2024%2B-brightgreen.svg)](https://nodejs.org)
+[![Node 22.16+ / 24+](https://img.shields.io/badge/node-22.16%2B%20%2F%2024%2B-brightgreen.svg)](https://nodejs.org)
 ![Platforms](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-8a8076.svg)
 
 **A machine-wide coordination layer so multiple AI coding agents running at once
@@ -61,7 +61,7 @@ or, on Windows (also builds the VS Code Fleet panel):
 Both are **idempotent** (safe to re-run) and **fail-soft** (skip a step if a CLI
 isn't installed). They wire Claude and Codex hooks, Claude's statusline, the global git
 pre-commit net, and the MCP server into Claude and Codex, then run the health
-check. **Requires Node 22.13+ (22.x) or Node 24+.** Setup probes SQLite before
+check. **Requires Node 22.16+ (22.x) or Node 24+.** Setup probes SQLite before
 modifying configuration. Open new agent sessions afterward to pick it up.
 In Codex, review/trust the new hooks in `/hooks`. Until trusted, use MCP claims
 and message polling. See [Codex integration](./docs/CODEX.md).
@@ -247,7 +247,7 @@ npm test                          # full suite, each test in an isolated throwaw
 node test/run-all.mjs messages    # filter by name
 ```
 
-CI runs the suite on Windows, macOS, and Linux (Node 22.13.0 + 24) on every push and PR.
+CI runs the suite on Windows, macOS, and Linux (Node 22.16.0 + 24) on every push and PR.
 The minimum Node 22 version is pinned deliberately; the local verification and
 release status are recorded in [the release notes](./docs/releases/v1.9.0.md).
 

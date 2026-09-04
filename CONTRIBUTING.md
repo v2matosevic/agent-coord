@@ -16,7 +16,7 @@ welcome as long as they keep it that way. By participating you agree to the
 - **Cross-platform.** Everything runs on Windows, macOS, and Linux. Platform
   branches use `process.platform`; paths go through `lib/path-canon.mjs`. CI
   runs the suite on all three.
-- **Node 22.13+ (22.x) or 24+** (for unflagged `node:sqlite`). No build step, no transpilation — plain
+- **Node 22.16+ (22.x) or 24+** (for unflagged `node:sqlite`). No build step, no transpilation — plain
   ESM `.mjs` everywhere.
 
 ## Getting set up

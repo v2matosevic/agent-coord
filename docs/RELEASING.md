@@ -2,9 +2,11 @@
 
 Releases are MIT-licensed source distributions on GitHub. `package.json` stays
 private to prevent accidental npm publication. There is no compiled server or
-bundled Node runtime; users need Node 22.13+ (22.x) or Node 24+ and run setup after
-extracting/cloning. SQLite became available without an experimental flag in
-[Node 22.13](https://nodejs.org/api/sqlite.html).
+bundled Node runtime; users need Node 22.16+ (22.x) or Node 24+ and run setup after
+extracting/cloning. Full-text search requires SQLite FTS5, enabled in
+[Node 22.16.0](https://nodejs.org/en/blog/release/v22.16.0) by
+[the common SQLite build flags change](https://github.com/nodejs/node/pull/57621).
+Setup and doctor probe FTS5 rather than accepting an import-only SQLite check.
 
 ## Before tagging
 
@@ -20,7 +22,7 @@ extracting/cloning. SQLite became available without an experimental flag in
    configured Codex hook is trusted or executing.
 5. Commit the intended files. Review `pending_push_review`, then push the branch
    and verify the remote SHA equals the tested commit.
-6. Wait for CI on that exact SHA: Windows, macOS and Linux, Node 22.13.0 and 24.
+6. Wait for CI on that exact SHA: Windows, macOS and Linux, Node 22.16.0 and 24.
    A different revision's green run does not validate this release.
    Linux/Node 24 also installs and smoke-tests a clean source archive without
    checkout metadata, so source-distribution coverage stays in CI.

@@ -14,8 +14,8 @@ bottom; it is idempotent (safe to re-run) and cross-platform.
 
 Run these and confirm before continuing:
 
-- **Node 22.13+ (22.x) or 24+** (required for unflagged `node:sqlite`):
-  `node --version`. Setup probes SQLite before modifying configuration.
+- **Node 22.16+ (22.x) or 24+** (required for `node:sqlite` with FTS5):
+  `node --version`. Setup probes SQLite and full-text search before modifying configuration.
 - **git present:** `git --version`.
 - You are at the repo root (this file is here): the folder contains `setup.mjs`, `cli/`, `hooks/`, `mcp/`.
 

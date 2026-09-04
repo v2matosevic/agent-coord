@@ -14,10 +14,13 @@ const checks = [];
 const add = (ok, label, detail = "") => checks.push({ ok, label, detail });
 
 try {
-  await import("node:sqlite");
-  add(true, "node:sqlite runtime");
+  const { DatabaseSync } = await import("node:sqlite");
+  const probe = new DatabaseSync(":memory:");
+  try { probe.exec("CREATE VIRTUAL TABLE runtime_fts USING fts5(content)"); }
+  finally { probe.close(); }
+  add(true, "node:sqlite runtime + FTS5");
 } catch (e) {
-  add(false, "node:sqlite runtime", e.message);
+  add(false, "node:sqlite runtime + FTS5", e.message);
 }
 
 try {

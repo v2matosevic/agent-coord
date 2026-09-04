@@ -6,8 +6,8 @@ $root = ($PSScriptRoot -replace '\\', '/')
 $node = "node"
 $flag = "--disable-warning=ExperimentalWarning"
 
-& $node $flag --input-type=module -e "import { DatabaseSync } from 'node:sqlite'; const db = new DatabaseSync(':memory:'); db.close();"
-if ($LASTEXITCODE -ne 0) { throw "agent-coord requires Node 22.13+ (22.x) or Node 24+. No configuration was changed." }
+& $node $flag --input-type=module -e "import { DatabaseSync } from 'node:sqlite'; const db = new DatabaseSync(':memory:'); db.exec('CREATE VIRTUAL TABLE runtime_fts USING fts5(content)'); db.close();"
+if ($LASTEXITCODE -ne 0) { throw "agent-coord requires Node 22.16+ (22.x) or Node 24+. No configuration was changed." }
 
 Write-Host "== agent-coord setup ==" -ForegroundColor Cyan
 
