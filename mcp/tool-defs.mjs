@@ -28,7 +28,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "read_messages",
-    description: "Read messages other agents left for you in this workspace (plus global broadcasts). Marks them read. Each message carries `from_live` — false means that sender has since EXITED, so don't treat its message as live presence or plan a hand-off to it. A big backlog is delivered in batches — if the result carries `remaining`, call again for the rest. Call when you start a task and periodically during long work.",
+    description: "Read your active inbox: direct messages from any workspace, workspace/global broadcasts sent during your session, and earlier broadcasts from live peers. Earlier broadcasts from inactive peers remain available through search. Marks returned messages read. Each message carries `from_live`; false means the sender has exited, not that the message can be ignored. A backlog is delivered in batches; `remaining` names what is still pending. Trusted hooks already deliver messages between tool calls; poll here when hooks are unavailable or to retrieve pending messages needed for your task.",
     inputSchema: { type: "object", properties: {} },
   },
   {
