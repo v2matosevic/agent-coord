@@ -3,6 +3,10 @@
 Owner request: closed terminals and agents remain visible as active, causing
 other agents to wait for workers that have exited. Issue: `i-ed8bdebd`.
 
+Delivery update: [v1.9.1 is published and locally installed](releases/v1.9.1.md#published-delivery-record).
+All six CI jobs and the final extracted archive's 52 suites passed. A fresh
+installed-path MCP reports 1.9.1; existing sessions need reopening to load it.
+
 ## Changed behavior
 
 - Record a resolved native client PID in the additive `agents.owner_pid` column.
@@ -47,7 +51,7 @@ Codex hook trust or prove that every currently open MCP server has reloaded.
 
 ## Delivery and limits
 
-Local version: 1.9.1. Configured Claude and Codex hooks point directly into this
+At the initial implementation handoff, local version was 1.9.1. Configured Claude and Codex hooks point directly into this
 checkout, so subsequent hook executions read the changed code. MCP servers load
 modules at startup: open fresh agent sessions to load the complete repair and
 new process ownership. No global install, hook trust change, publication or
@@ -66,4 +70,5 @@ Process probes classify only `ESRCH` as death. Permission failures, unknown
 owners and unrecognized launchers do not authorize a release. A live PID does
 not exempt a session from activity expiry. PID reuse is not birth-time verified;
 an immediately reused PID can delay detection, rather than release a live peer.
-Native Windows execution was tested; macOS/Linux native acceptance was not run.
+Initial native execution was tested on Windows. Release CI subsequently passed
+on Windows, macOS and Linux; interactive native UI acceptance was not run.
