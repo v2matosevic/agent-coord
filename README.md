@@ -75,6 +75,18 @@ node cli/doctor.mjs        # expect: 10/10 configuration checks passed
 
 ## What you get
 
+Version 1.9.1 fixes stale presence after terminal closure. Known exited agent
+processes stop blocking on the next coordination check, and background MCP
+keepalives cannot revive ended sessions. AD/Hephaestus readers receive an
+explicitly ended heartbeat instead of falling back to an older live snapshot.
+If no coordination process remains to check, the original three-minute timeout
+still applies. See [the release notes](docs/releases/v1.9.1.md).
+
+To upgrade an existing clone, run `git pull --ff-only`, `node setup.mjs`, and
+`node cli/doctor.mjs`, then open fresh agent sessions. Preserve the existing
+coordination store. Already-running MCP servers keep their loaded version until
+restarted; the MCP `whoami` response reports that version.
+
 | Agent | What it gets |
 |---|---|
 | **Claude Code** | Full enforcement — a `PreToolUse` hook claims the file you're about to edit or **blocks it (`exit 2`)** if a peer holds it. Bash guard reserves dev port / DB / deploy. Statusline shows the fleet **and your own identity**. MCP tools for active coordination. |

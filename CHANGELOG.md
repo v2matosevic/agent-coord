@@ -3,7 +3,22 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
-## Unreleased: identity isolation, native deny delivery and contention evidence
+## v1.9.1: closed-session cleanup and reliable coordination (2026-09-10)
+
+- Closed native Claude/Codex processes stop blocking on the next coordination
+  check. Updated MCP servers also check owner processes every five seconds.
+  Unknown owners and permission failures retain the existing activity timeout.
+- Ended heartbeat markers stay explicitly cold, so AD/Hephaestus readers do not
+  fall back to an older live snapshot. Background MCP keepalives cannot revive
+  a session after SessionEnd; explicit resume still works.
+- Fleet output excludes inactive agents' file/resource leases and queue entries.
+  Process ownership is an additive migration; existing coordination data stays.
+- New sessions no longer receive historical broadcasts from inactive peers.
+  Direct messages, current-session broadcasts and searchable history remain.
+- Includes the identity, native denial and contention repairs listed below.
+  See [release notes](docs/releases/v1.9.1.md) for upgrade steps and limits.
+
+### Identity isolation, native deny delivery and contention evidence
 
 - Exhausting the 64-name pool now uses a stable session suffix instead of
   impersonating another agent. Existing names no longer recycle into old
@@ -22,7 +37,8 @@ single-user tool with trunk-based history, so entries map to themes, not semver.
   already approved profile trust and deterministic localhost tool responses.
   See [continuation evidence](docs/VALIDATION-2026-09-05.md) for scope and limits.
 
-These changes are not in the immutable v1.9.0 tag or its draft source assets.
+These changes first ship together in v1.9.1; they are not in the immutable
+v1.9.0 tag or its draft source assets.
 
 ## v1.9.0: native Codex coordination
 

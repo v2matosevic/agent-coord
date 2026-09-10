@@ -33,6 +33,11 @@ remain with the host. Hosted tools and arbitrary scripts are outside hook
 coverage. A per-repository git hook override or `--no-verify` can bypass the
 global git guard. Fail-open store errors are reported as degraded operation.
 
+Process-owner checks are liveness hints, not authentication. Only a definitively
+absent local PID ends an agent early; permission failures and unknown owners
+retain heartbeat expiry. PID reuse is not birth-time verified and can delay
+cleanup. The cleanup never terminates operating-system processes.
+
 ## Reporting a vulnerability
 
 If you find a way to break the guarantees above (e.g. a hook injection via
