@@ -1,5 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { writeFileSync } from "node:fs";
+
+// The executable remains codex even when the main thread has a different label.
+if (process.platform === "linux") writeFileSync("/proc/self/comm", "fixture-renamed\n");
 
 const client = new Client({ name: "owner-fixture", version: "1" }, { capabilities: {} });
 const transport = new StdioClientTransport({ command: process.env.COORD_TEST_NODE,
