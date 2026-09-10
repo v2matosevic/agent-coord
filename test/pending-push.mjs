@@ -20,6 +20,9 @@ execFileSync("git", ["init", "--bare", "-q", remote]);
 execFileSync("git", ["clone", "-q", remote, work]);
 g(work, "config", "user.email", "t@t");
 g(work, "config", "user.name", "t");
+// Provenance is supplied explicitly below. A globally installed post-commit
+// hook writes asynchronously and can otherwise overwrite these fixture records.
+g(work, "config", "core.hooksPath", join(base, "no-hooks"));
 writeFileSync(join(work, "a.txt"), "1");
 g(work, "add", ".");
 g(work, "commit", "-qm", "base");
@@ -87,6 +90,7 @@ execFileSync("git", ["init", "--bare", "-q", innerRemote]);
 execFileSync("git", ["clone", "-q", innerRemote, inner]);
 g(inner, "config", "user.email", "t@t");
 g(inner, "config", "user.name", "t");
+g(inner, "config", "core.hooksPath", join(base, "no-hooks"));
 writeFileSync(join(inner, "i.txt"), "1");
 g(inner, "add", ".");
 g(inner, "commit", "-qm", "inner base");
@@ -125,6 +129,7 @@ try {
 } catch {} // git holds Windows file locks briefly; temp dir is disposable
 
 console.log("verdicts:", JSON.stringify(v));
+console.log("stable attribution:", stableAttribution, "| session-link verdict:", linkVerdict);
 console.log("env-session verdict:", envVerdict, "| nested scope ok:", scopeOk, "| non-repo ok:", notRepoOk);
 console.log("inner:", rInner.repo, rInner.range, "| outer:", rOuter.repo, rOuter.range);
 console.log("recommendation:", r.recommendation);
