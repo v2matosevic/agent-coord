@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { codexContext, patchTargets } from "../lib/codex-context.mjs";
 import { getDb, setDegraded, clearDegraded } from "../lib/store.mjs";
 import { ensureAgentContext, heartbeat, markDead } from "../lib/agents.mjs";
+import { findAgentPid } from "../lib/proc-ancestry.mjs";
 import { claimOperation, releaseAllForAgent, enqueue } from "../lib/leases.mjs";
 import { canonicalFilePath, isRepoRelative } from "../lib/path-canon.mjs";
 import { detectWriteTargets } from "../lib/bash-targets.mjs";
@@ -45,10 +46,11 @@ try {
     releaseAllForAgent(db, agentId);
     markDead(db, agentId);
     logActivity(db, { agentId, workspaceId: ws, event: "release" });
-    writeSnapshotThrottled(db);
+    writeSnapshotThrottled(db, 0);
     process.exit(0);
   }
-  ensureAgentContext(db, { agentId, tool: "codex", repoPath: repoRoot || ctx.cwd, branch });
+  ensureAgentContext(db, { agentId, tool: "codex", repoPath: repoRoot || ctx.cwd, branch,
+    ownerPid: event === "SessionStart" || event === "SubagentStart" ? findAgentPid() : null });
   if (event === "SessionStart" || event === "SubagentStart") {
     const brief = buildRoomBrief(db, { agentId, workspaceId: ws, repoRoot, wrap: (s) => s + "\n" });
     if (brief) process.stdout.write(brief + "\n");

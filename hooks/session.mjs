@@ -81,7 +81,8 @@ try {
 
   if (MODE === "register") {
     const { repoRoot, branch } = ctx();
-    ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch, pid: process.ppid });
+    ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch, pid: process.ppid,
+      ownerPid: Number(process.env.CLAUDE_PID) || claudePidNow || findClaudePid(process.ppid) });
     logActivity(db, { agentId, workspaceId: workspaceId(repoRoot), event: "register", detail: repoRoot });
     reap(db);
     // Publish claude.exe -> our id so this session's stdio MCP server adopts the
@@ -141,7 +142,8 @@ try {
     if (ctxText) process.stdout.write(ctxText + "\n");
   } else if (MODE === "sub-start") {
     const { repoRoot, branch } = ctx();
-    ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch, task: input.agent_type || "subagent" });
+    ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch, task: input.agent_type || "subagent",
+      ownerPid: Number(process.env.CLAUDE_PID) || findClaudePid(process.ppid) });
     logActivity(db, { agentId, workspaceId: workspaceId(repoRoot), event: "subagent-start", detail: input.agent_type });
   } else {
     // sub-stop or release — same teardown, different id resolved above

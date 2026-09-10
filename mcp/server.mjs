@@ -5,7 +5,9 @@ import { randomUUID } from "node:crypto";
 import { agentIdFromSession, agentIdFromEnv, isClaudeChild, sessionIdFromEnv } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb } from "../lib/store.mjs";
-import { ensureAgent, ensureAgentContext, heartbeat, setIntent, markDead } from "../lib/agents.mjs";
+import { ensureAgent, ensureAgentContext, heartbeat, keepAlive, setIntent, markDead } from "../lib/agents.mjs";
+import { findAgentPid } from "../lib/proc-ancestry.mjs";
+import { pruneExitedAgents, processRunning } from "../lib/liveness.mjs";
 import { claimFile, releaseFile, claimResource, releaseResource, releaseAllForAgent, peekConflicts } from "../lib/leases.mjs";
 import { logActivity, getFleet, getGlobalState } from "../lib/activity.mjs";
 import { postMessage, readMessages, findReplies, annotateSenders } from "../lib/messages.mjs";
@@ -17,7 +19,7 @@ import { workspaceId, canonicalFilePath } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { pollSessionLinkAny, sessionAnchorPids } from "../lib/session-link.mjs";
 import { reconcileServerIdentity, followSessionLink } from "../lib/server-identity.mjs";
-import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
+import { writeSnapshot, writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { findOverlappingPeers, clearOverlapNotice } from "../lib/overlap.mjs";
 import { createTask, claimTask, claimNextTask, updateTask, listTasks } from "../lib/tasks.mjs";
 import { recordDecision, listDecisions } from "../lib/decisions.mjs";
@@ -75,6 +77,7 @@ const db = getDb();
 // 2026-06-18). Gated to claude-code so a Codex server skips the process-tree walk.
 const LINK_POLL_MS = Number(process.env.AGENT_COORD_LINK_POLL_MS) || 4000;
 const anchorPids = tool === "claude-code" ? sessionAnchorPids(process.ppid) : [process.ppid];
+const ownerPid = (tool === "claude-code" && Number(process.env.CLAUDE_PID)) || findAgentPid();
 const startedAt = Date.now();
 let agentId = null;
 let basis = "standalone"; // env | link | standalone — surfaced by whoami
@@ -103,7 +106,7 @@ if (!agentId) agentId = agentIdFromSession(randomUUID());
 
 // Hookless clients register on first use. Merely opening an MCP connection
 // must not create a second visible agent beside a native Codex SessionStart.
-if (tool === "claude-code") ensureAgent(db, { agentId, tool, repoPath: repoRoot, branch });
+if (tool === "claude-code") ensureAgent(db, { agentId, tool, repoPath: repoRoot, branch, ownerPid });
 reap(db);
 if (tool === "claude-code" && !adopted) logActivity(db, { agentId, workspaceId: ws, event: "register", detail: `${tool} ${repoRoot || ""}` });
 
@@ -123,6 +126,7 @@ function cleanup() {
   try {
     releaseAllForAgent(db, agentId);
     markDead(db, agentId);
+    writeSnapshot(db);
     logActivity(db, { agentId, event: "release" });
   } catch {}
 }
@@ -416,6 +420,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: a = {} } = req.params;
   try {
+    if (pruneExitedAgents(db)) writeSnapshot(db);
     const hookContext = a._coord === undefined ? null : codexContext(a._coord);
     if (hookContext && !usingHookContext) {
       // An unused placeholder has no claims to clean up. Old servers could have
@@ -451,7 +456,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       ws: workspaceId(current.repoRoot || cwd), cwd, basis, adopted, anchorPids,
       sessionId: basis === "env" ? sessionIdFromEnv(process.env, tool) : null };
     if (!hookContext) defaultUsed = true;
-    ensureAgentContext(db, { agentId: context.agentId, tool: context.tool, repoPath: context.repoRoot || context.cwd, branch: context.branch });
+    ensureAgentContext(db, { agentId: context.agentId, tool: context.tool, repoPath: context.repoRoot || context.cwd, branch: context.branch, ownerPid });
     heartbeat(db, context.agentId);
     writeSnapshotThrottled(db); // the fleet mirror must not depend on a TUI statusline running (i-da708fe8)
     // Normalize model-supplied args against the tool's declared schema BEFORE
@@ -469,12 +474,15 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 // presence alive while connected; this never renews file warmth. Native hooks
 // own their liveness, so a background server cannot resurrect ended threads.
 const pulse = setInterval(() => {
-  if (cleaned || adopted || usingHookContext || !defaultUsed) return;
+  if (cleaned) return;
   try {
-    const current = gitContext(cwd);
-    ensureAgentContext(db, { agentId, tool, repoPath: current.repoRoot || cwd, branch: current.branch });
+    if (pruneExitedAgents(db)) writeSnapshot(db);
+    // An orphaned transport must not keep refreshing a closed terminal's agent.
+    if (processRunning(ownerPid) === false) { cleanup(); return; }
+    if (adopted || usingHookContext || !defaultUsed) return;
+    keepAlive(db, agentId);
     writeSnapshotThrottled(db);
   } catch {}
-}, HB_THROTTLE_MS).unref();
+}, Math.min(5000, HB_THROTTLE_MS)).unref();
 server.onclose = () => { clearInterval(pulse); cleanup(); };
 await server.connect(new StdioServerTransport());
