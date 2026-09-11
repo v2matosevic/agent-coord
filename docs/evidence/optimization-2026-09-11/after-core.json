@@ -1,0 +1,81 @@
+{
+  "measuredAt": "2026-09-11T14:10:35.565Z",
+  "node": "v22.22.0",
+  "platform": "win32",
+  "revision": "dc56ead53e7f222edcd480d006976610e390036c",
+  "fixture": {
+    "peers": 40,
+    "leasesPerPeer": 8,
+    "samples": 25,
+    "warmups": 3,
+    "storage": "OS temporary directory",
+    "emptyHookOutputBytes": 0
+  },
+  "catalog": {
+    "tools": 28,
+    "instructionsBytes": 554,
+    "toolDefinitionsBytes": 16814,
+    "wireBytes": 17396,
+    "repeatedInstructionsBytes": 32438
+  },
+  "latency": {
+    "storeOpen": {
+      "samples": 25,
+      "p50Ms": 4.42,
+      "p95Ms": 5.803,
+      "minMs": 3.287,
+      "maxMs": 6.045
+    },
+    "storeProcess": {
+      "samples": 25,
+      "p50Ms": 94.302,
+      "p95Ms": 139.274,
+      "minMs": 77.557,
+      "maxMs": 246.006
+    },
+    "quietHookProcess": {
+      "samples": 25,
+      "p50Ms": 112.107,
+      "p95Ms": 165.054,
+      "minMs": 92.391,
+      "maxMs": 169.483
+    },
+    "fleetRead": {
+      "samples": 25,
+      "p50Ms": 0.409,
+      "p95Ms": 0.556,
+      "minMs": 0.298,
+      "maxMs": 0.594
+    },
+    "mcpConnectMs": 2386.682,
+    "mcpRoundtrip": {
+      "read_messages": {
+        "samples": 25,
+        "p50Ms": 8.212,
+        "p95Ms": 25.823,
+        "minMs": 2.453,
+        "maxMs": 27.359
+      },
+      "list_active_agents": {
+        "samples": 25,
+        "p50Ms": 4.279,
+        "p95Ms": 5.799,
+        "minMs": 2.831,
+        "maxMs": 6.164
+      },
+      "get_global_state": {
+        "samples": 25,
+        "p50Ms": 6.424,
+        "p95Ms": 10.398,
+        "minMs": 3.748,
+        "maxMs": 12.689
+      }
+    }
+  },
+  "resultBytes": {
+    "read_messages": 56,
+    "list_active_agents": 13345,
+    "get_global_state": 22722
+  },
+  "limits": "Local synthetic timings, not task completion time or billed model tokens. Whole process timings include Node startup. Run on unchanged fixture and hardware; timings are advisory, never flaky test gates."
+}

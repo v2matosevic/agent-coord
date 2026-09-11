@@ -1,0 +1,97 @@
+{
+  "measuredAt": "2026-09-11T14:31:53.006Z",
+  "node": "v22.22.0",
+  "platform": "win32",
+  "revision": "dc56ead53e7f222edcd480d006976610e390036c",
+  "runtimeSha256": "e90678399cb60c429a5d9c76a16d020765e28f6b5550361889ad2944f6305e8c",
+  "fixture": {
+    "peers": 40,
+    "leasesPerPeer": 8,
+    "samples": 25,
+    "warmups": 3,
+    "nativeHooks": true,
+    "storage": "OS temporary directory",
+    "emptyHookOutputBytes": 0
+  },
+  "catalog": {
+    "tools": 28,
+    "instructionsBytes": 1407,
+    "toolDefinitionsBytes": 20291,
+    "wireBytes": 21726,
+    "repeatedInstructionsBytes": 59799
+  },
+  "latency": {
+    "storeOpen": {
+      "samples": 25,
+      "p50Ms": 4.937,
+      "p95Ms": 9.604,
+      "minMs": 4.234,
+      "maxMs": 11.298
+    },
+    "storeProcess": {
+      "samples": 25,
+      "p50Ms": 84.796,
+      "p95Ms": 99.834,
+      "minMs": 73.439,
+      "maxMs": 104.923
+    },
+    "quietHookProcess": {
+      "samples": 25,
+      "p50Ms": 104.512,
+      "p95Ms": 118.548,
+      "minMs": 94.729,
+      "maxMs": 142.264
+    },
+    "fleetRead": {
+      "samples": 25,
+      "p50Ms": 1.332,
+      "p95Ms": 1.595,
+      "minMs": 0.886,
+      "maxMs": 1.708
+    },
+    "nativeMetadataProcess": {
+      "samples": 25,
+      "p50Ms": 112.544,
+      "p95Ms": 134.048,
+      "minMs": 99.247,
+      "maxMs": 135.435
+    },
+    "nativeNoopProcess": {
+      "samples": 25,
+      "p50Ms": 111.171,
+      "p95Ms": 128.701,
+      "minMs": 95.119,
+      "maxMs": 134.657
+    },
+    "mcpConnectMs": 1176.66,
+    "mcpRoundtrip": {
+      "read_messages": {
+        "samples": 25,
+        "p50Ms": 2.499,
+        "p95Ms": 6.494,
+        "minMs": 1.318,
+        "maxMs": 7.094
+      },
+      "list_active_agents": {
+        "samples": 25,
+        "p50Ms": 2.981,
+        "p95Ms": 3.88,
+        "minMs": 2.207,
+        "maxMs": 5.211
+      },
+      "get_global_state": {
+        "samples": 25,
+        "p50Ms": 4.268,
+        "p95Ms": 6.167,
+        "minMs": 2.938,
+        "maxMs": 7.45
+      }
+    }
+  },
+  "resultBytes": {
+    "read_messages": 56,
+    "list_active_agents": 15346,
+    "get_global_state": 24724
+  },
+  "limits": "Local synthetic timings, not task completion time or billed model tokens. Whole process timings include Node startup. Run on unchanged fixture and hardware; timings are advisory, never flaky test gates."
+}

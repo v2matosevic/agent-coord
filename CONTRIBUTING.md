@@ -10,9 +10,11 @@ welcome as long as they keep it that way. By participating you agree to the
   built-ins (`node:sqlite`, `node:fs`, …). The MCP server carries the single
   allowed dependency (`@modelcontextprotocol/sdk`). PRs that add a dependency
   need a very good reason; PRs that add a *native* dependency will be declined.
-- **Fail open, but loud.** A bug in coordination must never freeze someone's
-  work. Guards and hooks catch their own errors, warn, and let the operation
-  proceed. Keep that property in anything you touch.
+- **Bound failures and report them.** Coordination must not hold a hook beyond
+  its host deadline. Ordinary errors fail open with a degraded warning. Codex
+  deadline exhaustion before ownership is checked returns a structured refusal
+  for the affected write, rather than silently allowing an unchecked edit.
+  Advisory events return promptly; undelivered messages remain unread.
 - **Cross-platform.** Everything runs on Windows, macOS, and Linux. Platform
   branches use `process.platform`; paths go through `lib/path-canon.mjs`. CI
   runs the suite on all three.

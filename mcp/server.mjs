@@ -26,7 +26,7 @@ import { recordDecision, listDecisions } from "../lib/decisions.mjs";
 import { collisionHotspots, pathHistory } from "../lib/insights.mjs";
 import { searchRecords } from "../lib/search.mjs";
 import { reportIssue, listIssues, updateIssue, projectLabel, normSeverity } from "../lib/issues.mjs";
-import { TOOL_DEFS } from "./tool-defs.mjs";
+import { TOOL_DEFS, INSTRUCTIONS } from "./tool-defs.mjs";
 import { normalizeArgs } from "./args.mjs";
 import { readFileSync } from "node:fs";
 
@@ -393,27 +393,6 @@ function handle(name, a, context) {
       throw new Error(`unknown tool: ${name}`);
   }
 }
-
-// `instructions` is the one piece of server text that stays in EVERY session's
-// context when the client defers tool schemas (Claude Code's tool search does
-// this by default) — so it carries the whole protocol in miniature, front-loaded,
-// and must stay well under the client's 2KB truncation.
-const INSTRUCTIONS =
-  "Coordinates ALL AI coding agents on this machine — you are one agent among live peers who may be " +
-  "editing the same repo, dev port, or DB right now. Protocol: announce_intent BEFORE starting work — " +
-  "one call IS the whole check-in: it returns your identity, live peers, the task board, standing " +
-  "decisions, and unread mail (`brief`), plus a duplicate-work warning (later starter narrows its lane) — " +
-  "no separate whoami/list_active_agents needed; " +
-  "claim_files BEFORE editing and renew before each edit when native hooks are absent; " +
-  "read_messages periodically when native hooks are absent; post_message/reply to coordinate; claim_resource before dev-server/" +
-  "migration/deploy; record_decision to pin choices peers must not contradict; claim_next_task pulls " +
-  "ready work from the shared board, update_task(status:done, summary:...) hands off to dependents; " +
-  "pending_push_review BEFORE pushing commits you didn't author (instead of asking the human); " +
-  "search to full-text query past messages/decisions/tasks/issues ('has this been discussed or built?'); " +
-  "report_issue to log a bug/footgun/broken-build you hit ANYWHERE — a durable cross-project backlog the " +
-  "operator reviews and fixes later (not live coordination). " +
-  "File locks self-heal: a blocked file auto-frees minutes after its holder moves on — edit elsewhere " +
-  "and retry or post_message the holder; never ask the human to unlock, never force-release a live peer.";
 
 const server = new Server({ name: "agent-coord", version: VERSION }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));

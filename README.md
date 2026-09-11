@@ -322,7 +322,7 @@ in the store. See [`DESIGN.md` §9](./DESIGN.md) for the full list.
 ## Contributing & security
 
 PRs welcome — read [`CONTRIBUTING.md`](./CONTRIBUTING.md) first (zero-dependency
-rule, fail-open invariant, test expectations). Security model and how to report
+rule, bounded failure behavior, test expectations). Security model and how to report
 a vulnerability: [`SECURITY.md`](./SECURITY.md). Licensed [MIT](./LICENSE).
 
 ---

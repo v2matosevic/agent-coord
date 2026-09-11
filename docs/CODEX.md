@@ -63,8 +63,21 @@ calls. It never returns an allow decision for shell commands or file edits.
 Known conflicts return a structured `permissionDecision: deny` with exit 0.
 PowerShell can map a native exit 2 to shell exit 1, which Codex treats as a
 non-blocking hook failure. The structured deny survives that shell boundary.
-Store or adapter errors fail open with a visible
-degraded warning, consistent with the existing system.
+Ordinary store or adapter errors fail open with a visible degraded warning.
+Codex coordination uses one 1.5-second budget for database waits and optional
+Git/process discovery, reduced to one second for SessionEnd. A budget exhausted
+before file/resource ownership is checked returns a structured denial for that
+operation; advisory events return with a degraded warning. No unchecked edit is
+allowed just to avoid a timeout. The next event can recover when the store is
+available; pending mail remains unread.
+
+MCP identity forwarding and unrelated PreToolUse events use a lightweight path
+without SQLite or repository discovery. Shell operations still refresh their
+workspace/branch context, including read-only commands. PostToolUse retains
+heartbeats and message delivery. Hook commands and trust configuration are
+unchanged. OS scheduling, blocked filesystem I/O, or host shell startup can still
+exceed a host timeout; the budget bounds coordination-controlled waits, not the
+operating system. See [research and measurements](OPTIMIZATION-2026-09-11.md).
 
 The git guard prefers the committing process's session identity over a recent
 per-repository marker. It reads NUL-delimited staged paths with rename detection

@@ -31,7 +31,11 @@ by the native hook, not an authentication token. A same-user process can supply
 it directly. Only agent-coord MCP calls are rewritten; shell/edit approvals
 remain with the host. Hosted tools and arbitrary scripts are outside hook
 coverage. A per-repository git hook override or `--no-verify` can bypass the
-global git guard. Fail-open store errors are reported as degraded operation.
+global git guard. Ordinary store errors are reported as degraded operation.
+Codex hooks bound database/subprocess waits; deadline exhaustion before an
+ownership check denies that write instead of allowing it unchecked. Advisory
+events return promptly and preserve pending mail. This is a cooperation guard,
+not a sandbox or a guarantee against host/OS stalls.
 
 Process-owner checks are liveness hints, not authentication. Only a definitively
 absent local PID ends an agent early; permission failures and unknown owners

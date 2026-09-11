@@ -3,6 +3,22 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Unreleased: context efficiency and bounded Codex hooks (2026-09-11)
+
+- Shorter MCP instructions and descriptions preserve all 28 tools and their
+  schemas. Reference catalog tokens fall 20.3%; hosts repeating server guidance
+  per tool see a 45.5% reduction in that catalog representation.
+- Codex identity forwarding and unrelated pre-tool events use a lightweight
+  entry point without SQLite or repository discovery. Remaining hook waits
+  share 1.5 seconds, or one second for SessionEnd. Exhausting the budget before
+  an ownership check refuses the affected write; advisory events return promptly.
+- Warm stores skip schema write transactions using an additive readiness record
+  invalidated by schema changes. Fleet reads use one indexed query while keeping
+  complete ADE snapshots and the existing public fields.
+- Research, before/after measurements, native checks and delivery limits:
+  [optimization report](docs/OPTIMIZATION-2026-09-11.md). Existing MCP processes
+  need their normal restart; installed hook commands and trust are unchanged.
+
 ## v1.9.1: closed-session cleanup and reliable coordination (2026-09-10)
 
 - Closed native Claude/Codex processes stop blocking on the next coordination

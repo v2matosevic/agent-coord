@@ -2,6 +2,9 @@
 // supplies a default identity. Codex hooks attach request-local session metadata
 // so threads sharing a transport never rename one another.
 
+// Keep the first 512 characters useful when a host truncates server guidance.
+export const INSTRUCTIONS = "Machine-wide coordination for agents sharing files and resources. Start with announce_intent: one call returns identity, peers, board, decisions and mail counts. Without trusted native hooks, claim_files before each edit and poll read_messages. Locks self-heal; never force-release a live peer or ask the human to unlock. Use post_message/reply for peers, claim_resource for shared services, pending_push_review before pushing peer commits. Search prior work; record_decision pins choices. Board tools hand off tasks; report_issue logs bugs and friction.";
+
 const strArr = { type: "array", items: { type: "string" } };
 
 export const TOOL_DEFS = [
@@ -13,27 +16,27 @@ export const TOOL_DEFS = [
   {
     name: "announce_intent",
     description:
-      "Your ONE check-in call — announce what you're about to work on, before starting a task. Returns `brief` (who you are, live peers here, the task board, standing decisions, unread mail — no separate whoami/list_active_agents/list_tasks needed) plus `overlaps` + a `warning` if a live peer is already doing similar work — if you're the later starter, narrow your lane or hand off instead of duplicating.",
+      "Start here: one call returns identity, peers, board, decisions and unread-mail counts in brief, plus task overlaps. If a live peer started the same work first, narrow your lane or hand off.",
     inputSchema: { type: "object", properties: { task: { type: "string" } }, required: ["task"] },
   },
   {
     name: "list_active_agents",
-    description: "List live agents with the file each holds. Default: the whole fleet (all repos/windows). Pass scope:'workspace' for just this repo's agents.",
+    description: "List live agents and each one's latest held file. Default: all repos. Use scope:'workspace' for this repo.",
     inputSchema: { type: "object", properties: { scope: { type: "string", enum: ["global", "workspace"] } } },
   },
   {
     name: "post_message",
-    description: "Leave a message for other agents to coordinate (e.g. 'refactoring auth, leave lib/auth alone'; 'API ready, wire the UI'). Default scope is THIS workspace (same repo) for broadcasts. Pass scope:'global' for the whole fleet, or to:<agent_id> to direct it — a directed message reaches its recipient in any repo. Messages live 7 days.",
+    description: "Message peers. Broadcasts default to this workspace; scope:'global' broadcasts fleet-wide. to:<agent_id> reaches that peer in any repo. Messages expire after 7 days.",
     inputSchema: { type: "object", properties: { body: { type: "string" }, to: { type: "string" }, scope: { type: "string", enum: ["workspace", "global"] } }, required: ["body"] },
   },
   {
     name: "read_messages",
-    description: "Read your active inbox: direct messages from any workspace, workspace/global broadcasts sent during your session, and earlier broadcasts from live peers. Earlier broadcasts from inactive peers remain available through search. Marks returned messages read. Each message carries `from_live`; false means the sender has exited, not that the message can be ignored. A backlog is delivered in batches; `remaining` names what is still pending. Trusted hooks already deliver messages between tool calls; poll here when hooks are unavailable or to retrieve pending messages needed for your task.",
+    description: "Read and mark returned inbox messages read; remaining reports the backlog. Includes direct messages across repos, broadcasts during your session, and older broadcasts from live peers. Other history stays in search. from_live:false means the sender exited, not that the message is irrelevant. Trusted hooks deliver mail; poll when hooks are absent or pending mail is needed.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "get_global_state",
-    description: "Full snapshot: agents, file leases, resource leases, queue, recent activity. Long lists are capped at the newest rows (a `note` says when) — use check_conflicts/list_tasks for a scoped full view.",
+    description: "Fleet snapshot: agents, file/resource leases, queue, tasks and recent activity. Lists are capped with a note when clipped; check_conflicts/list_tasks give scoped detail.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -57,7 +60,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "claim_resource",
-    description: "Reserve a shared singleton before using it. Use a machine-wide id for a real OS singleton (e.g. 'port:3000') so every repo contends; the shell guard auto-claims deploys/migrations per-repo, but pass a stable shared id here (e.g. 'deploy:prod-host') when several projects genuinely deploy to ONE host and must serialize.",
+    description: "Claim a shared singleton before use. Give the same OS service one machine-wide id, e.g. 'port:3000'. Shell guards scope deployments/migrations per repo; use a shared id such as 'deploy:prod-host' when repos target the same service.",
     inputSchema: { type: "object", properties: { resource_id: { type: "string" }, reason: { type: "string" } }, required: ["resource_id"] },
   },
   {
@@ -72,46 +75,46 @@ export const TOOL_DEFS = [
   },
   {
     name: "pending_push_review",
-    description: "BEFORE pushing, review unpushed commits you may not have made: who authored each, whether that agent is still live, and what's safe vs. needs a peer or the human. Use this INSTEAD of asking the human 'should I push these other commits?'. Every result names the repo/branch/upstream it inspected — pass `repo` (any path inside the checkout) when you're working in a NESTED repo, otherwise it answers about this server's cwd.",
+    description: "Review unpushed commits before pushing peer work: authors, liveness and blockers. Returns the inspected repo/branch/upstream. For a nested checkout pass repo:<path inside it>; otherwise uses this server's cwd. Inspect the verdict before pushing.",
     inputSchema: { type: "object", properties: { repo: { type: "string", description: "path inside the git repo to review (default: this session's repo)" } } },
   },
   {
     name: "ask_agent",
-    description: "Ask a specific live agent a question; returns an ask_id to collect the reply with check_replies. Only works if that agent is currently in list_active_agents (a finished agent can't answer). e.g. ask a commit's author if it's prod-ready.",
+    description: "Ask a live peer; returns ask_id for check_replies. Verify the recipient in list_active_agents: an exited peer cannot answer.",
     inputSchema: { type: "object", properties: { to: { type: "string" }, question: { type: "string" } }, required: ["to", "question"] },
   },
   {
     name: "check_replies",
-    description: "Non-blocking: collect replies to an ask_id. If empty and the peer isn't live, stop waiting and fall back (decide from recorded state or tell the human).",
+    description: "Collect replies to ask_id without waiting. If none and the peer exited, decide from recorded state or tell the human; stop polling.",
     inputSchema: { type: "object", properties: { ask_id: { type: "string" } }, required: ["ask_id"] },
   },
   {
     name: "reply",
-    description: "Answer another agent's ask. Pass the ask_id and the asker's agent_id (the from_agent on the question you received).",
+    description: "Answer a peer's ask using ask_id and to:<asker's from_agent>.",
     inputSchema: { type: "object", properties: { ask_id: { type: "string" }, to: { type: "string" }, answer: { type: "string" } }, required: ["ask_id", "to", "answer"] },
   },
   {
     name: "request_yield",
     description:
-      "Ask a specific peer to STAND DOWN because you're already doing that work (the clean alternative to force-releasing their locks or having the human kill them). They hear it mid-turn; if they agree they release their files and stop. Use when you and a peer are provably duplicating and you started first / have the verified version.",
+      "Ask a peer to stand down when you started duplicated work first or hold the verified result. If they agree they release files and stop. Never force-release their locks.",
     inputSchema: { type: "object", properties: { to: { type: "string" }, reason: { type: "string" } }, required: ["to"] },
   },
   {
     name: "query_history",
     description:
-      "Who recently touched a file (exact path) or directory (prefix) in THIS repo — the distinct agents plus edit/claim/conflict events. Use before diving into an unfamiliar or shared area to spot a peer who owns it or recent churn the lock wouldn't show. Optional `days` window (default 14).",
+      "Find agents and edit/claim/conflict events for a file or directory prefix in this repo. Use before unfamiliar shared work. days defaults to 14.",
     inputSchema: { type: "object", properties: { path: { type: "string" }, days: { type: "number" } }, required: ["path"] },
   },
   {
     name: "list_tasks",
     description:
-      "Show the shared task board for THIS repo: every task, who owns it (and if they're still live), status (open/claimed/done/blocked), and dependency readiness. Check this before picking work so you don't duplicate a peer.",
+      "This repo's complete board: owners, owner liveness, open/claimed/done/blocked status and dependency readiness. Check before picking work.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "claim_task",
     description:
-      "Claim a unit of work so peers know it's yours — the structural way to avoid two agents building the same thing. Pass `title` to create+claim a new task (deduped against existing titles), or `task_id` to claim an existing one from list_tasks. Fails if a LIVE peer already owns it. Optional `depends_on` (task ids) records ordering; `priority` (higher = sooner) orders claim_next_task. Returns `handoff`: summaries from completed dependencies, so you start informed.",
+      "Claim existing task_id or create+claim a deduplicated title. Refuses a live owner. depends_on sets prerequisites; higher priority goes first. Returns completed dependency summaries in handoff.",
     inputSchema: {
       type: "object",
       properties: {
@@ -126,13 +129,13 @@ export const TOOL_DEFS = [
   {
     name: "claim_next_task",
     description:
-      "Pull the next unit of work from this repo's board: atomically claims the highest-priority READY task (all deps done, not owned by a live peer). Call when you finish something and have capacity, or when told to 'pick up work'. Returns the task plus `handoff` — what upstream tasks built — so you can start immediately. Empty board → granted:false; do something else.",
+      "Atomically claim the highest-priority ready task in this repo, with completed dependency summaries in handoff. Ready means dependencies done and no live owner. Empty board returns granted:false.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "update_task",
     description:
-      "Update a task you're working: status one of open|claimed|done|blocked ('open' also releases it). When marking 'done', PASS `summary` — 1-3 sentences on what you built/changed, where, and any gotchas. It's delivered to whoever depends on or later claims downstream work; without it they start blind. `detail` updates the task description.",
+      "Update task_id. status:'open' releases it; 'done' should include summary (what changed, where, gotchas) for downstream agents. detail replaces its description.",
     inputSchema: {
       type: "object",
       properties: {
@@ -147,18 +150,18 @@ export const TOOL_DEFS = [
   {
     name: "record_decision",
     description:
-      "Record a project-level decision (architecture, convention, library choice — e.g. topic 'auth', decision 'httpOnly JWT cookies, no localStorage') so parallel and future agents stay CONSISTENT. It's broadcast to live peers and shown in every new agent's session brief. Check list_decisions before deciding something that might already be decided; re-recording a topic supersedes it.",
+      "Pin a project choice for current and future peers; broadcast and show it in session briefs. Check list_decisions first. Reusing topic supersedes its previous decision.",
     inputSchema: { type: "object", properties: { topic: { type: "string" }, decision: { type: "string" } }, required: ["topic", "decision"] },
   },
   {
     name: "list_decisions",
-    description: "The standing decisions for this repo (latest per topic). Consult before making architectural or convention choices so you don't contradict a peer's recorded decision.",
+    description: "Latest standing decisions per topic in this repo. Consult before choosing architecture or conventions.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "search",
     description:
-      "Full-text search this repo's coordination memory: peer messages, recorded decisions, and board tasks. Ask in plain words ('auth cookie decision', 'checkout bug', 'who handled the migration') — best matches first with «highlighted» snippets. Use it to answer 'has this been discussed/decided/built already?' before starting; chronological dumps (list_decisions, list_tasks) only show the latest.",
+      "Full-text search this repo's messages, decisions, tasks and issues, with ranked highlighted snippets. Check whether work was discussed or built before starting. Use kinds to filter and limit to bound results.",
     inputSchema: {
       type: "object",
       properties: {
@@ -172,7 +175,7 @@ export const TOOL_DEFS = [
   {
     name: "report_issue",
     description:
-      "Log a problem you hit — anywhere, any repo — to the durable CROSS-PROJECT issue log, so the operator can review and fix it later with full context (instead of you fixing it now or it being lost). Use for real bugs, recurring friction, broken builds, confusing/broken APIs, or coordination failures you notice. NOT for live coordination (use post_message) and not for normal task handoff (use update_task). Only `title` is required; add `body` with what happened + repro + error text + what you tried, `severity` (low|medium|high|critical), `kind` (bug|friction|build|coordination|perf|docs|other), and `area` (the file/dir/component). It's auto-tagged with this project, agent, branch, and time.",
+      "Log a bug, friction, build failure or coordination problem for later review. title is required; body should carry repro, error and attempted fixes. Auto-tags repo/agent/branch/time. Durable across projects. Use post_message for live coordination and update_task for handoffs.",
     inputSchema: {
       type: "object",
       properties: {
@@ -189,7 +192,7 @@ export const TOOL_DEFS = [
   {
     name: "list_issues",
     description:
-      "Read THIS repo's issue log — known problems logged against this project, so you can check before debugging something that may already be on file (maybe with a fix from last time). Filter by `status` (open|resolved|wontfix|all, default open) and `severity`. Each issue carries its full body, reporter, and (if resolved) how it was fixed. Scoped to this workspace by design; the cross-project survey is the operator's `cli/issues.mjs`, not an in-session tool.",
+      "Read this repo's issues, including bodies and resolutions. Defaults to open; filter status/severity and bound with limit. Cross-project survey: cli/issues.mjs.",
     inputSchema: {
       type: "object",
       properties: {
@@ -202,7 +205,7 @@ export const TOOL_DEFS = [
   {
     name: "resolve_issue",
     description:
-      "Close out an issue from the log once it's fixed (or won't be). Pass the `issue_id`, a `resolution` (1-3 sentences on HOW it was fixed — this is what the next session reads when the same thing recurs), and optional `status` (resolved|wontfix, default resolved). Reopen with status not supported here — use the CLI.",
+      "Close issue_id after fixing it. Include resolution: how it was fixed and relevant caveats. status defaults to resolved; wontfix also supported. Reopen through the CLI.",
     inputSchema: {
       type: "object",
       properties: {

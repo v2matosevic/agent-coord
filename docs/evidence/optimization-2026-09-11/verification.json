@@ -1,0 +1,30 @@
+{
+  "runtimeSha256": "00a16108f5beffa9e1fd28b52cd8277ca6683b9a0818e9e76939b13203852228",
+  "coordinationSuites": 57,
+  "nativeChecks": 21,
+  "doctorChecks": 10,
+  "adeTestsPassed": 2318,
+  "adeTestsSkipped": 3,
+  "adeCheckErrors": 0,
+  "adeCheckWarnings": 0,
+  "adeLintPassed": true,
+  "logs": {
+    "coordination": {
+      "file": "coord-full-tests-20260911.log",
+      "sha256": "bd67216889bb8360de2e9fc126229cd48384933ef71ab8dc8ad3eb0c8e2d12e8"
+    },
+    "adeCheck": {
+      "file": "coord-ade-check-20260911.log",
+      "sha256": "21c2579178f9b330d8343e9de353a8a7cf819ea7486c373c5ca7b7b391ba10a7"
+    },
+    "adeLint": {
+      "file": "coord-ade-lint-20260911.log",
+      "sha256": "cbe5f96ba1a49c04f91935063609e8081a401a6cdc066d7931947bf18719e79e"
+    },
+    "adeTests": {
+      "file": "coord-ade-tests-20260911.log",
+      "sha256": "e54e38ceaf6fc70ac891edb858a2bd335e98fff7661017ab6416c6f800841bb2"
+    }
+  },
+  "note": "Full suite passed on unchanged runtime. The subsequent stricter 3s SessionEnd contention test also passed. No ADE binary or remote release produced."
+}

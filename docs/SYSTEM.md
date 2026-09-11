@@ -77,8 +77,12 @@ every repo on the machine.
 retry-on-busy, so a claim's check-and-insert is atomic across processes (proven:
 30 processes racing → exactly one winner).
 
-**Fail-open-but-loud:** any store error makes a hook proceed (never freezes real
-work) but writes a `coord-degraded.flag` + stderr, surfaced by statusline/doctor.
+**Bounded errors:** ordinary store errors let hooks proceed with
+`coord-degraded.flag` + stderr, surfaced by statusline/doctor. Codex wait-budget
+exhaustion before ownership verification denies the affected write; advisory
+events return with a warning. Its SQLite and optional subprocess waits share
+1.5 seconds (one second for SessionEnd), below the configured host timeout.
+See [the efficiency and timeout work](OPTIMIZATION-2026-09-11.md).
 
 ---
 
@@ -268,7 +272,8 @@ this protocol + the commit net, since they can't be hard-blocked pre-write.
 - **Model ignores advisories** — Claude `PreToolUse` auto-claims regardless; the
   git pre-commit net backstops every committer; silent edits caught by
   `content_hash`/commit-time.
-- **Store SPOF** — fail-open-but-loud (degraded flag + stderr + statusline banner).
+- **Store SPOF** — degraded flag + stderr + statusline banner; Codex wait budgets
+  bound contention and refuse writes whose ownership could not be checked.
 - **WAL growth / network FS** — periodic `wal_checkpoint`; store must be on a
   local, non-synced disk.
 
