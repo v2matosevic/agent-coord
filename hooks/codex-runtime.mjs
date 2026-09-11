@@ -18,6 +18,7 @@ import { overlapHardBlock, stripHarnessPreamble } from "../lib/overlap.mjs";
 import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { finishFileOperation } from "../lib/contention.mjs";
 import { deadlineAfter } from "../lib/deadline.mjs";
+import { observeGuardDenial } from "../lib/guard-observation.mjs";
 
 // PowerShell -Command maps a native exit 2 to shell exit 1. Codex treats 1 as
 // a hook failure and continues. Use its documented structured deny with exit 0
@@ -93,11 +94,13 @@ try {
       : { granted: true };
     if (!result.granted) {
       if (result.kind === "resource") {
-        logActivity(db, { agentId, workspaceId: ws, event: "resource-conflict", detail: result.resourceId });
+        observeGuardDenial(db, () => logActivity(db, { agentId, workspaceId: ws, event: "resource-conflict", detail: result.resourceId }));
         deny(`agent-coord: ${result.resourceId} is held by ${result.conflict.agent_id}. Wait or coordinate.`);
       }
-      enqueue(db, { kind: "file", key: ws + "||" + result.path, agentId });
-      logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: result.path });
+      observeGuardDenial(db, () => {
+        enqueue(db, { kind: "file", key: ws + "||" + result.path, agentId });
+        logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: result.path });
+      });
       deny(`agent-coord: "${result.path}" is held by ${result.conflict.agent_id}. Edit elsewhere or coordinate; the lease frees when they move on.`);
     }
     uncheckedWrite = false; // ownership was verified; optional telemetry may fail

@@ -63,6 +63,9 @@ calls. It never returns an allow decision for shell commands or file edits.
 Known conflicts return a structured `permissionDecision: deny` with exit 0.
 PowerShell can map a native exit 2 to shell exit 1, which Codex treats as a
 non-blocking hook failure. The structured deny survives that shell boundary.
+Queue/activity logging faults cannot reverse a known denial. That optional
+bookkeeping gets at most 50 ms of the remaining wait budget; enforcement keeps
+the original conflicting owner in its response even if diagnostics fail.
 Ordinary store or adapter errors fail open with a visible degraded warning.
 Codex coordination uses one 1.5-second budget for database waits and optional
 Git/process discovery, reduced to one second for SessionEnd. A budget exhausted

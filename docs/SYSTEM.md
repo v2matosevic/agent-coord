@@ -77,6 +77,12 @@ every repo on the machine.
 retry-on-busy, so a claim's check-and-insert is atomic across processes (proven:
 30 processes racing → exactly one winner).
 
+Claude shell commands and native Codex operations reserve their recognized files
+and resources in one transaction. A refusal rolls back new claims and renewals;
+an earlier reservation remains unchanged. Optional activity/queue bookkeeping
+cannot override a known refusal and has a 50 ms transaction wait budget.
+See [the reliability follow-up](SYSTEM-RELIABILITY-2026-09-11.md).
+
 **Bounded errors:** ordinary store errors let hooks proceed with
 `coord-degraded.flag` + stderr, surfaced by statusline/doctor. Codex wait-budget
 exhaustion before ownership verification denies the affected write; advisory

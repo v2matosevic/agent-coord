@@ -1,0 +1,36 @@
+{
+  "measuredAt": "2026-09-11T15:31:54.814Z",
+  "node": "v22.22.0",
+  "platform": "win32",
+  "fixture": {
+    "rows": 140000,
+    "relevantEditRows": 700,
+    "storage": "in memory",
+    "warmups": 3
+  },
+  "before": {
+    "samples": 50,
+    "p50Ms": 11.003199999999993,
+    "p95Ms": 12.036899999999946,
+    "result": {
+      "hotspots": 7
+    },
+    "plan": [
+      "SCAN activity_log"
+    ]
+  },
+  "after": {
+    "samples": 50,
+    "p50Ms": 1.7929000000000315,
+    "p95Ms": 2.2456999999999425,
+    "result": {
+      "hotspots": 7
+    },
+    "plan": [
+      "SEARCH activity_log USING INDEX idx_activity_edit_workspace_ts (workspace_id=? AND ts>?)"
+    ]
+  },
+  "indexBuildMs": 21.533800000000042,
+  "identicalResults": true,
+  "limits": "Synthetic query comparison, not total task latency. Partial index is maintained only for edits with a path."
+}

@@ -3,7 +3,7 @@ import { resolveAgentId } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded } from "../lib/store.mjs";
 import { ensureAgent, heartbeatFresh } from "../lib/agents.mjs";
-import { claimResource, claimFile, enqueue } from "../lib/leases.mjs";
+import { claimOperation, enqueue } from "../lib/leases.mjs";
 import { logActivity } from "../lib/activity.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { detectResources } from "../lib/resource-rules.mjs";
@@ -11,6 +11,7 @@ import { detectWriteTargets } from "../lib/bash-targets.mjs";
 import { writeCommitterMarker } from "../lib/committer.mjs";
 import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
+import { observeGuardDenial } from "../lib/guard-observation.mjs";
 
 // PreToolUse on Bash/PowerShell: claim machine-wide singletons (dev port / dev
 // DB / deploy) the command would touch, blocking with exit 2 if another live
@@ -46,46 +47,41 @@ try {
   const isCommit = /\bgit\s+commit\b/.test(command);
   if (isCommit) writeCommitterMarker(repoRoot, agentId);
 
-  // A git commit is never itself a port/DB/deploy use — skip resource detection so
-  // a message mentioning "deploy"/"migrate" (incl. -m and heredoc/-F forms) can't trip it.
+  // A shell command is one operation: a refused file or resource rolls back
+  // ALL new reservations, including renewals of claims already owned. A git
+  // commit only uses its marker; words in its message are not write targets.
   if (!isCommit) {
-    // Pass the workspace so a per-project resource (deploy) is keyed to THIS repo —
-    // a deploy in another repo must not block a command here (BUG 3A) — and the
-    // repo root so the dev-server rule can resolve the project's REAL port
-    // (package script / .env) instead of guessing 3000 (i-231005d4).
-    for (const r of detectResources(command, { workspaceId: ws, repoRoot })) {
-      const res = claimResource(db, { agentId, resourceId: r.resourceId, reason: r.label });
-      if (!res.granted) {
-        logActivity(db, { agentId, workspaceId: ws, event: "resource-conflict", detail: r.resourceId });
+    const resources = detectResources(command, { workspaceId: ws, repoRoot })
+      .map(r => ({ resourceId: r.resourceId, reason: r.label }));
+    const paths = repoRoot ? detectWriteTargets(command, repoRoot, cwd) : [];
+    const res = paths.length || resources.length
+      ? claimOperation(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, paths, resources,
+        mode: "exclusive", reason: "bash-write", operationId: input.tool_use_id })
+      : { granted: true };
+    if (!res.granted) {
+      if (res.kind === "resource") {
+        const label = resources.find(r => r.resourceId === res.resourceId)?.reason || "shared resource";
+        observeGuardDenial(db, () => logActivity(db, { agentId, workspaceId: ws, event: "resource-conflict", detail: res.resourceId }));
         process.stderr.write(
-          `⛔ agent-coord: ${r.label} (${r.resourceId}) is in use by ${res.conflict.agent_id} ` +
+          `⛔ agent-coord: ${label} (${res.resourceId}) is in use by ${res.conflict.agent_id} ` +
             `(${res.conflict.current_task || "working"}). Running this now would collide — wait or coordinate.\n`,
         );
         process.exit(2);
       }
-      logActivity(db, { agentId, workspaceId: ws, event: "resource-claim", detail: r.resourceId });
-    }
-
-    // Shell file mutations (sed -i / > / >> / tee / cp / mv / touch / Set-Content)
-    // bypass the Write/Edit guard. Claim each target the command would write,
-    // blocking only on a warm live peer — same self-healing guarantee as a normal
-    // edit, and the enqueue means you'll hear "✅ free now" mid-turn when it
-    // releases. Only in a real repo (a room); relative targets resolve against
-    // the command's cwd (often a subdir, not the root).
-    for (const path of repoRoot ? detectWriteTargets(command, repoRoot, cwd) : []) {
-      const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: "bash-write", operationId: input.tool_use_id });
-      if (!res.granted) {
+      const path = res.path;
+      observeGuardDenial(db, () => {
         enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
         logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });
-        notify({ title: "⛔ agent-coord — blocked (shell)", message: `"${path}" is held by ${res.conflict.agent_id}.`, key: `block:${path}`, sound: true });
-        process.stderr.write(
-          `⛔ agent-coord: this command writes "${path}", held by ${res.conflict.agent_id} (${res.conflict.current_task || "working"}). ` +
-            `It auto-frees when they move on — wait, target another file, or post_message to coordinate. Don't force it.\n`,
-        );
-        process.exit(2);
-      }
-      logActivity(db, { agentId, workspaceId: ws, event: "claim", detail: path });
+      });
+      notify({ title: "⛔ agent-coord — blocked (shell)", message: `"${path}" is held by ${res.conflict.agent_id}.`, key: `block:${path}`, sound: true });
+      process.stderr.write(
+        `⛔ agent-coord: this command writes "${path}", held by ${res.conflict.agent_id} (${res.conflict.current_task || "working"}). ` +
+          `It auto-frees when they move on — wait, target another file, or post_message to coordinate. Don't force it.\n`,
+      );
+      process.exit(2);
     }
+    for (const r of resources) logActivity(db, { agentId, workspaceId: ws, event: "resource-claim", detail: r.resourceId });
+    for (const path of paths) logActivity(db, { agentId, workspaceId: ws, event: "claim", detail: path });
   }
   process.exit(0);
 } catch (e) {

@@ -13,6 +13,7 @@ import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
 import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { finishFileOperation } from "../lib/contention.mjs";
+import { observeGuardDenial } from "../lib/guard-observation.mjs";
 
 // PreToolUse (default) on Write|Edit|MultiEdit|NotebookEdit: claim the file, or
 // exit 2 to block when another live agent holds it. PostToolUse (--post): just
@@ -80,7 +81,7 @@ try {
   // work, so it must never block writes elsewhere (a memory dir, another tree).
   const dup = isRepoRelative(path) ? overlapHardBlock(db, { agentId, workspaceId: ws }) : null;
   if (dup) {
-    logActivity(db, { agentId, workspaceId: ws, event: "overlap-block", detail: dup.agentId });
+    observeGuardDenial(db, () => logActivity(db, { agentId, workspaceId: ws, event: "overlap-block", detail: dup.agentId }));
     notify({
       title: "⛔ agent-coord — stood down",
       message: `Your task duplicates ${dup.agentId}'s (they started first). Narrow your lane or hand off.`,
@@ -98,8 +99,10 @@ try {
 
   const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: input.tool_name, operationId: input.tool_use_id });
   if (!res.granted) {
-    enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
-    logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });
+    observeGuardDenial(db, () => {
+      enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
+      logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });
+    });
     notify({
       title: "⛔ agent-coord — blocked",
       message: `"${path}" is held by ${res.conflict.agent_id} (${res.conflict.current_task || "working"}).`,

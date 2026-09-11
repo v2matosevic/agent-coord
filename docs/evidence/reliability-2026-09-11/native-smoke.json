@@ -1,0 +1,33 @@
+{
+  "checks": {
+    "a_native_mcp": true,
+    "a_shell_matches_mcp": true,
+    "a_claims_granted": true,
+    "own_commit_allowed": true,
+    "b_native_mcp": true,
+    "b_shell_matches_mcp": true,
+    "distinct_sessions": true,
+    "patch_block_names_holder": true,
+    "blocked_bytes_unchanged": true,
+    "holder_receives_wait_notice": true,
+    "directed_mail_after_local_tool": true,
+    "explicit_release": true,
+    "waiter_reclaims": true,
+    "waiter_rereads": true,
+    "patch_after_release": true,
+    "a_native_exit_zero": true,
+    "b_native_exit_zero": true,
+    "hook_definitions_and_trust_unchanged": true,
+    "native_wait_episode_recorded": true,
+    "session_end_releases_claims": true,
+    "session_end_marks_both_dead": true
+  },
+  "errors": [],
+  "versions": [
+    "1.9.2"
+  ],
+  "limitations": [
+    "Deterministic localhost model responses; actual installed CLI dispatches every tool and hook.",
+    "MCP reconnect not exercised by this driver."
+  ]
+}

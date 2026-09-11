@@ -3,7 +3,16 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
-## Unreleased: context efficiency and bounded Codex hooks (2026-09-11)
+## Unreleased v1.9.2: efficiency and resilient guards (2026-09-11)
+
+- Known collision denials survive activity/queue logging faults in Claude and
+  Codex. Optional denial bookkeeping gets at most 50 ms of the existing wait
+  budget. Claude shell file/resource reservations now commit together, so a
+  rejected command leaves no unused partial claims.
+- Claim-time hotspot queries use a partial workspace/time index over edits,
+  replacing a full activity-history scan. Source version 1.9.2 makes older MCP
+  processes identifiable through `whoami.version`; no hook trust change needed.
+  [Follow-up reliability evidence](docs/SYSTEM-RELIABILITY-2026-09-11.md).
 
 - Shorter MCP instructions and descriptions preserve all 28 tools and their
   schemas. Reference catalog tokens fall 20.3%; hosts repeating server guidance
