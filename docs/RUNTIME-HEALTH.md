@@ -32,12 +32,12 @@ Storage is local under `AGENT_COORD_HOME/health`, defaulting to
 `AGENT_COORD_HEALTH=0` for a process to opt out; no global setting is changed by
 the implementation or tests.
 
-| Bound | Value |
-|---|---:|
-| Record | At most 768 UTF-8 bytes |
-| Hourly bucket | 8 MiB, plus at most one record per concurrent appender |
-| Retention target | Current hour and five previous hours |
-| Cleanup | At most 32 directory entries examined when a bucket is created |
+| Bound                    |                                                          Value |
+| ------------------------ | -------------------------------------------------------------: |
+| Record                   |                                        At most 768 UTF-8 bytes |
+| Hourly bucket            |         8 MiB, plus at most one record per concurrent appender |
+| Retention target         |                           Current hour and five previous hours |
+| Cleanup                  | At most 32 directory entries examined when a bucket is created |
 | MCP version observations | At most one per caller per minute; cache capped at 256 callers |
 
 Each record is one append. Writers never rewrite another event. A full bucket
@@ -116,6 +116,10 @@ and [the passing rerun](evidence/runtime-health-2026-09-11/native-passed.json).
 This feature exposes that storage failure; it does not claim to repair it.
 
 ## Delivery and rollback
+
+The ADE reader is now included in published Windows/Mac 0.0.96. The complete
+[session handoff](SESSION-HANDOFF-2026-09-12.md) records source, verification,
+installed-versus-published state and the remaining Mac collector/pairing work.
 
 The existing hook commands load the collector from the installed checkout.
 New MCP processes load version reporting on their normal restart. Hook
