@@ -19,11 +19,13 @@ import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { finishFileOperation } from "../lib/contention.mjs";
 import { deadlineAfter } from "../lib/deadline.mjs";
 import { observeGuardDenial } from "../lib/guard-observation.mjs";
+import { bindHealthContext, markHealthDenied } from "../lib/runtime-health.mjs";
 
 // PowerShell -Command maps a native exit 2 to shell exit 1. Codex treats 1 as
 // a hook failure and continues. Use its documented structured deny with exit 0
 // so a known conflict survives the shell boundary without changing hook trust.
 function deny(reason) {
+  markHealthDenied();
   process.stderr.write(reason + "\n");
   process.stdout.write(JSON.stringify({ hookSpecificOutput: {
     hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason,
@@ -42,6 +44,7 @@ try {
     ? resolve(input.cwd, args.workdir) : input.cwd;
   const ctx = codexContext({ ...input, cwd: executionCwd }, { deadline });
   const { agentId, repoRoot, branch, ws } = ctx;
+  bindHealthContext({ agentId, ws });
   let planned;
   if (event === "PreToolUse") {
     const shell = /^(?:Bash|PowerShell|exec_command|shell_command)$/.test(toolName);

@@ -12,6 +12,7 @@ import { writeCommitterMarker } from "../lib/committer.mjs";
 import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
 import { observeGuardDenial } from "../lib/guard-observation.mjs";
+import { beginHookHealth, bindHealthContext, markHealthDenied } from "../lib/runtime-health.mjs";
 
 // PreToolUse on Bash/PowerShell: claim machine-wide singletons (dev port / dev
 // DB / deploy) the command would touch, blocking with exit 2 if another live
@@ -30,9 +31,11 @@ function readInput() {
 }
 
 const input = readInput();
+beginHookHealth("claude-code", input, { event: "PreToolUse" });
 // Subagent shell edits: inherit the parent session's base name (see session-link).
 const parentBase = input?.agent_id ? parentBaseFromProc(process.ppid) : null;
 const agentId = resolveAgentId(input, { parentBase });
+bindHealthContext({ agentId });
 const cwd = input.cwd || process.cwd();
 const command = input.tool_input?.command || "";
 
@@ -40,6 +43,7 @@ try {
   const db = getDb();
   const { repoRoot, branch } = gitContext(cwd);
   const ws = workspaceId(repoRoot);
+  bindHealthContext({ agentId, ws });
   // Fires on every shell call — skip the upsert write txn while the local
   // heartbeat marker is fresh (see guard.mjs / lib/agents.mjs).
   if (!heartbeatFresh(agentId)) ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
@@ -59,6 +63,7 @@ try {
         mode: "exclusive", reason: "bash-write", operationId: input.tool_use_id })
       : { granted: true };
     if (!res.granted) {
+      markHealthDenied();
       if (res.kind === "resource") {
         const label = resources.find(r => r.resourceId === res.resourceId)?.reason || "shared resource";
         observeGuardDenial(db, () => logActivity(db, { agentId, workspaceId: ws, event: "resource-conflict", detail: res.resourceId }));

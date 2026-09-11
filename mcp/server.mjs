@@ -28,7 +28,8 @@ import { searchRecords } from "../lib/search.mjs";
 import { reportIssue, listIssues, updateIssue, projectLabel, normSeverity } from "../lib/issues.mjs";
 import { TOOL_DEFS, INSTRUCTIONS } from "./tool-defs.mjs";
 import { normalizeArgs } from "./args.mjs";
-import { readFileSync } from "node:fs";
+import { VERSION } from "../lib/version.mjs";
+import { observeMcpHealth } from "../lib/runtime-health.mjs";
 
 // A transport may serve several native sessions. Only request-local hook
 // context or a host-provided environment session id establishes that identity.
@@ -37,18 +38,6 @@ const argFlag = (f) => {
   const i = process.argv.indexOf(f);
   return i >= 0 ? process.argv[i + 1] : null;
 };
-
-// Synced to package.json so whoami can expose which code a long-running server
-// is actually executing — the server runs whatever was on disk at spawn time,
-// so a fix ships "invisibly" until sessions restart; the stamp makes stale
-// servers diagnosable instead of confusing.
-const VERSION = (() => {
-  try {
-    return JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
-  } catch {
-    return "0.0.0";
-  }
-})();
 
 // Which client spawned us. `--tool claude-code` is what the installer wires into
 // ~/.claude.json, but a client that builds its own MCP config (Hephaestus/ADE
@@ -437,6 +426,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (!hookContext) defaultUsed = true;
     ensureAgentContext(db, { agentId: context.agentId, tool: context.tool, repoPath: context.repoRoot || context.cwd, branch: context.branch, ownerPid });
     heartbeat(db, context.agentId);
+    observeMcpHealth(context, a._coord);
     writeSnapshotThrottled(db); // the fleet mirror must not depend on a TUI statusline running (i-da708fe8)
     // Normalize model-supplied args against the tool's declared schema BEFORE
     // they can reach a SQL bind (see mcp/args.mjs — kills the field-reported

@@ -1,0 +1,43 @@
+{
+  "measuredAt": "2026-09-11T17:12:42.107Z",
+  "node": "v22.22.0",
+  "platform": "win32",
+  "samples": 25,
+  "warmups": 3,
+  "result": {
+    "metadata": {
+      "off": {
+        "p50Ms": 70.17529999999988,
+        "p95Ms": 84.96319999999992
+      },
+      "on": {
+        "p50Ms": 73.1884,
+        "p95Ms": 82.971
+      },
+      "modelOutputUnchanged": true
+    },
+    "noop": {
+      "off": {
+        "p50Ms": 69.09409999999934,
+        "p95Ms": 73.44850000000042
+      },
+      "on": {
+        "p50Ms": 70.10419999999976,
+        "p95Ms": 78.27839999999924
+      },
+      "modelOutputUnchanged": true
+    },
+    "post": {
+      "off": {
+        "p50Ms": 101.81990000000042,
+        "p95Ms": 107.04140000000007
+      },
+      "on": {
+        "p50Ms": 104.32949999999983,
+        "p95Ms": 110.34100000000035
+      },
+      "modelOutputUnchanged": true
+    }
+  },
+  "limits": "Collection off/on on the same build; includes Node process overhead. This is not full task latency. Output equality checked on every run."
+}

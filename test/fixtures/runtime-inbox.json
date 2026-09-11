@@ -1,0 +1,94 @@
+{
+  "recipient": "fixture-receiver",
+  "workspace": "aaaaaaaaaaaaaaaa",
+  "readSeq": 1,
+  "agents": [
+    { "id": "fixture-receiver", "status": "active", "registered": -3600000, "heartbeat": 0 },
+    { "id": "departed", "status": "dead", "registered": -10800000, "heartbeat": -10800000 },
+    { "id": "parent", "status": "active", "registered": -10800000, "heartbeat": 0 }
+  ],
+  "messages": [
+    {
+      "seq": 1,
+      "from": "departed",
+      "to": "fixture-receiver",
+      "ws": "bbbbbbbbbbbbbbbb",
+      "at": -7200000,
+      "expires": 3600000
+    },
+    {
+      "seq": 2,
+      "from": "departed",
+      "to": null,
+      "ws": "aaaaaaaaaaaaaaaa",
+      "at": -7200000,
+      "expires": 3600000
+    },
+    {
+      "seq": 3,
+      "from": "parent",
+      "to": null,
+      "ws": "aaaaaaaaaaaaaaaa",
+      "at": -7200000,
+      "expires": 3600000
+    },
+    {
+      "seq": 4,
+      "from": "departed",
+      "to": null,
+      "ws": "aaaaaaaaaaaaaaaa",
+      "at": -3000000,
+      "expires": 3600000
+    },
+    { "seq": 5, "from": "departed", "to": null, "ws": null, "at": -3000000, "expires": 3600000 },
+    {
+      "seq": 6,
+      "from": "departed",
+      "to": null,
+      "ws": "bbbbbbbbbbbbbbbb",
+      "at": -3000000,
+      "expires": 3600000
+    },
+    {
+      "seq": 7,
+      "from": "departed",
+      "to": "someone-else",
+      "ws": "aaaaaaaaaaaaaaaa",
+      "at": -3000000,
+      "expires": 3600000
+    },
+    {
+      "seq": 8,
+      "from": "fixture-receiver",
+      "to": null,
+      "ws": "aaaaaaaaaaaaaaaa",
+      "at": -3000000,
+      "expires": 3600000
+    },
+    {
+      "seq": 9,
+      "from": "departed",
+      "to": "fixture-receiver",
+      "ws": null,
+      "at": -3000000,
+      "expires": -1000
+    },
+    {
+      "seq": 10,
+      "from": "parent/child",
+      "to": null,
+      "ws": "aaaaaaaaaaaaaaaa",
+      "at": -7200000,
+      "expires": 3600000
+    },
+    {
+      "seq": 11,
+      "from": "departed",
+      "to": "fixture-receiver",
+      "ws": "bbbbbbbbbbbbbbbb",
+      "at": -7200000,
+      "expires": 3600000
+    }
+  ],
+  "expectedSeqs": [3, 4, 5, 10, 11]
+}

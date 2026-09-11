@@ -2,6 +2,7 @@
 // pre-tool events do not load SQLite, resolve identities or inspect repositories.
 import { readFileSync } from "node:fs";
 import { deadlineAfter } from "../lib/deadline.mjs";
+import { beginHookHealth, markHealthFailure } from "../lib/runtime-health.mjs";
 
 try {
   const input = JSON.parse(readFileSync(0, "utf8"));
@@ -10,6 +11,7 @@ try {
   // Includes runtime module loading. Leave room for the host shell, especially
   // SessionEnd, whose configured host timeout is only three seconds.
   const deadline = deadlineAfter(event === "SessionEnd" ? 1000 : 1500);
+  beginHookHealth("codex", input);
   if (event === "SubagentStop" && !input.agent_id) process.exit(0);
   if (event === "PreToolUse") {
     const tool = input.tool_name || "";
@@ -31,6 +33,7 @@ try {
   const { runCodexHook } = await import("./codex-runtime.mjs");
   runCodexHook(input, deadline);
 } catch (error) {
+  markHealthFailure(error);
   try { (await import("../lib/store.mjs")).setDegraded(error); } catch {}
   process.stderr.write("agent-coord DEGRADED: " + error.message + "; coordination hook skipped.\n");
 }

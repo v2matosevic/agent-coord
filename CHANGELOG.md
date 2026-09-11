@@ -3,6 +3,19 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Unreleased v1.10.0: observed runtime health (2026-09-11)
+
+- Hooks record bounded operational metadata outside the lock database and model
+  context. Starts and completions expose missing evidence; errors and expected
+  refusals remain separate. Unexpected payload fields and raw error text are
+  excluded at the persistence boundary.
+- MCP processes report their loaded version at most once per minute per caller.
+  Existing commands and hook trust are unchanged; `AGENT_COORD_HEALTH=0` opts a
+  process out. The ADE integration reads mail counts without consuming messages.
+- Collection overhead, bounds, privacy and verification: [runtime health](docs/RUNTIME-HEALTH.md).
+  A native smoke captured the already recorded intermittent shutdown I/O failure;
+  its evidence is retained separately from the subsequent passing rerun.
+
 ## Unreleased v1.9.2: efficiency and resilient guards (2026-09-11)
 
 - Known collision denials survive activity/queue logging faults in Claude and

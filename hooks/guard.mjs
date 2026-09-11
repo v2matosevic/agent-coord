@@ -14,6 +14,7 @@ import { notify } from "../lib/notify.mjs";
 import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { finishFileOperation } from "../lib/contention.mjs";
 import { observeGuardDenial } from "../lib/guard-observation.mjs";
+import { beginHookHealth, bindHealthContext, markHealthDenied } from "../lib/runtime-health.mjs";
 
 // PreToolUse (default) on Write|Edit|MultiEdit|NotebookEdit: claim the file, or
 // exit 2 to block when another live agent holds it. PostToolUse (--post): just
@@ -30,11 +31,13 @@ function readInput() {
 }
 
 const input = readInput();
+beginHookHealth("claude-code", input, { event: input.hook_event_name || (POST ? "PostToolUse" : "PreToolUse") });
 // Subagent edits: inherit the parent session's base name (see session-link),
 // so a subagent's file claims and overlap checks belong to its parent's family
 // instead of a separate phantom session.
 const parentBase = input?.agent_id ? parentBaseFromProc(process.ppid) : null;
 const agentId = resolveAgentId(input, { parentBase });
+bindHealthContext({ agentId });
 const cwd = input.cwd || process.cwd();
 const fp = input.tool_input?.file_path || input.tool_input?.notebook_path || null;
 
@@ -42,6 +45,7 @@ try {
   const db = getDb();
   const { repoRoot, branch } = gitContext(cwd);
   const ws = workspaceId(repoRoot);
+  bindHealthContext({ agentId, ws });
   // This hook fires on EVERY tool call; skip the upsert (a write txn on the
   // shared store) while the local heartbeat marker is fresh — the row exists
   // and is at most HB_THROTTLE_MS stale. ensureAgent itself refreshes the
@@ -81,6 +85,7 @@ try {
   // work, so it must never block writes elsewhere (a memory dir, another tree).
   const dup = isRepoRelative(path) ? overlapHardBlock(db, { agentId, workspaceId: ws }) : null;
   if (dup) {
+    markHealthDenied();
     observeGuardDenial(db, () => logActivity(db, { agentId, workspaceId: ws, event: "overlap-block", detail: dup.agentId }));
     notify({
       title: "⛔ agent-coord — stood down",
@@ -99,6 +104,7 @@ try {
 
   const res = claimFile(db, { agentId, workspaceId: ws, repoPath: repoRoot, branch, path, mode: "exclusive", reason: input.tool_name, operationId: input.tool_use_id });
   if (!res.granted) {
+    markHealthDenied();
     observeGuardDenial(db, () => {
       enqueue(db, { kind: "file", key: ws + "||" + path, agentId });
       logActivity(db, { agentId, workspaceId: ws, event: "conflict", detail: path });

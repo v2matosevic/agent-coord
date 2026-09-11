@@ -17,6 +17,7 @@ import { workspaceId } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
 import { findClaudePid } from "../lib/proc-ancestry.mjs";
 import { writeSessionLink, cachedClaudePid, parentBaseFromProc, readSessionLinkMeta } from "../lib/session-link.mjs";
+import { beginHookHealth, bindHealthContext } from "../lib/runtime-health.mjs";
 
 // Lifecycle hook. Modes:
 //   --register        SessionStart      -> register parent agent
@@ -44,6 +45,9 @@ function readInput() {
 }
 
 const input = readInput();
+beginHookHealth("claude-code", input, { event: {
+  register: "SessionStart", prompt: "UserPromptSubmit", "sub-start": "SubagentStart", "sub-stop": "SubagentStop", release: "SessionEnd",
+}[MODE] });
 // Subagent events: pin the base to the parent session's claimed name (via the
 // claude.exe session-link) so a subagent shares its parent's identity even when
 // Claude hands it a different session_id. Parent events resolve normally.
@@ -74,10 +78,15 @@ if (MODE === "register" && !input?.agent_id && input?.session_id && input?.sourc
   } catch {}
 }
 const agentId = retained || resolveAgentId(input, { parentBase }); // parent for session events; distinct id for subagent events
+bindHealthContext({ agentId });
 
 try {
   const db = getDb();
-  const ctx = () => gitContext(input.cwd || process.cwd());
+  const ctx = () => {
+    const context = gitContext(input.cwd || process.cwd());
+    bindHealthContext({ agentId, ws: workspaceId(context.repoRoot) });
+    return context;
+  };
 
   if (MODE === "register") {
     const { repoRoot, branch } = ctx();
