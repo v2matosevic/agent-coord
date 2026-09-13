@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolveAgentId } from "../lib/identity.mjs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolveAgentId, sessionTokenFromId } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded, clearDegraded } from "../lib/store.mjs";
 import { ensureAgent, heartbeatFresh } from "../lib/agents.mjs";
@@ -7,7 +7,7 @@ import { claimFile, enqueue } from "../lib/leases.mjs";
 import { logActivity } from "../lib/activity.mjs";
 import { workspaceId, canonicalFilePath, isRepoRelative } from "../lib/path-canon.mjs";
 import { FILE_ACTIVE_MS } from "../lib/config.mjs";
-import { postToolContext } from "../lib/coord-context.mjs";
+import { preparePostToolContext, markPreparedContextOffered } from "../lib/coord-context.mjs";
 import { overlapHardBlock, earlierOverlappingPeers } from "../lib/overlap.mjs";
 import { parentBaseFromProc } from "../lib/session-link.mjs";
 import { notify } from "../lib/notify.mjs";
@@ -69,8 +69,14 @@ try {
       // budgeted against the bytes this write actually puts on the wire (the JSON
       // wrapper escapes every newline), or the ones nearest the 8192 cliff are
       // exactly the ones that get under-measured and filed away.
-      const out = postToolContext(db, { agentId, workspaceId: ws, eventName: failed ? "PostToolUseFailure" : "PostToolUse" });
-      if (out) process.stdout.write(out);
+      const delivery = preparePostToolContext(db, {
+        agentId, sessionToken: sessionTokenFromId(agentId), workspaceId: ws,
+        eventName: failed ? "PostToolUseFailure" : "PostToolUse",
+      });
+      if (delivery.text) {
+        writeFileSync(1, delivery.text);
+        markPreparedContextOffered(db, delivery);
+      }
     } catch {}
     process.exit(0);
   }
