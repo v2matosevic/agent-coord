@@ -1,7 +1,9 @@
 // Native Codex command hook. Does not approve shell/edit permissions. It only
 // denies known collisions or adds context. MCP argument rewriting is limited
 // to our own coordination tools so hooks and tools use the same thread identity.
+import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { sessionTokenFromId } from "../lib/identity.mjs";
 import { codexContext, patchTargets } from "../lib/codex-context.mjs";
 import { getDb, setDegraded, clearDegraded } from "../lib/store.mjs";
 import { ensureAgentContext, heartbeat, markDead } from "../lib/agents.mjs";
@@ -13,7 +15,7 @@ import { detectResources } from "../lib/resource-rules.mjs";
 import { writeCommitterMarker } from "../lib/committer.mjs";
 import { logActivity } from "../lib/activity.mjs";
 import { buildRoomBrief } from "../lib/room-brief.mjs";
-import { midTurnContext, postToolContext } from "../lib/coord-context.mjs";
+import { prepareMidTurnContext, preparePostToolContext, markPreparedContextOffered } from "../lib/coord-context.mjs";
 import { overlapHardBlock, stripHarnessPreamble } from "../lib/overlap.mjs";
 import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { finishFileOperation } from "../lib/contention.mjs";
@@ -44,6 +46,7 @@ try {
     ? resolve(input.cwd, args.workdir) : input.cwd;
   const ctx = codexContext({ ...input, cwd: executionCwd }, { deadline });
   const { agentId, repoRoot, branch, ws } = ctx;
+  const sessionToken = sessionTokenFromId(agentId);
   bindHealthContext({ agentId, ws });
   let planned;
   if (event === "PreToolUse") {
@@ -78,12 +81,18 @@ try {
   } else if (event === "UserPromptSubmit") {
     const task = typeof input.prompt === "string" ? stripHarnessPreamble(input.prompt).replace(/\s+/g, " ").trim().slice(0, 100) : null;
     heartbeat(db, agentId, task && !/^continue where you left off/i.test(task) ? task : null);
-    const context = midTurnContext(db, { agentId, workspaceId: ws, wrap: (s) => s + "\n" });
-    if (context) process.stdout.write(context + "\n");
+    const delivery = prepareMidTurnContext(db, { agentId, sessionToken, workspaceId: ws, wrap: (s) => s + "\n" });
+    if (delivery.text) {
+      writeFileSync(1, delivery.text + "\n");
+      markPreparedContextOffered(db, delivery);
+    }
   } else if (event === "PostToolUse") {
     finishFileOperation(db, { agentId, operationId: input.tool_use_id });
-    const out = postToolContext(db, { agentId, workspaceId: ws });
-    if (out) process.stdout.write(out);
+    const delivery = preparePostToolContext(db, { agentId, sessionToken, workspaceId: ws });
+    if (delivery.text) {
+      writeFileSync(1, delivery.text);
+      markPreparedContextOffered(db, delivery);
+    }
   } else if (event === "PreToolUse") {
     const { paths, resources, isCommit } = planned;
     if (paths.some(isRepoRelative)) {

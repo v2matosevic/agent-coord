@@ -5,13 +5,13 @@ import { writeSnapshotThrottled } from "../lib/snapshot.mjs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveAgentId, bindSessionName, COORD_HOME } from "../lib/identity.mjs";
+import { resolveAgentId, bindSessionName, COORD_HOME, sessionTokenFromId } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb, setDegraded } from "../lib/store.mjs";
 import { ensureAgent, markDead, heartbeat } from "../lib/agents.mjs";
 import { releaseAllForAgent } from "../lib/leases.mjs";
 import { logActivity } from "../lib/activity.mjs";
-import { midTurnContext } from "../lib/coord-context.mjs";
+import { prepareMidTurnContext, markPreparedContextOffered } from "../lib/coord-context.mjs";
 import { buildRoomBrief } from "../lib/room-brief.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
@@ -147,8 +147,14 @@ try {
     // Same delivery as mid-turn (messages + freed files + overlap advisory) —
     // UserPromptSubmit stdout is injected into context. `wrap` accounts for the
     // trailing newline this hook writes, so the budget matches the real payload.
-    const ctxText = midTurnContext(db, { agentId, workspaceId: workspaceId(repoRoot), wrap: (s) => s + "\n" });
-    if (ctxText) process.stdout.write(ctxText + "\n");
+    const delivery = prepareMidTurnContext(db, {
+      agentId, sessionToken: sessionTokenFromId(agentId),
+      workspaceId: workspaceId(repoRoot), wrap: (s) => s + "\n",
+    });
+    if (delivery.text) {
+      writeFileSync(1, delivery.text + "\n");
+      markPreparedContextOffered(db, delivery);
+    }
   } else if (MODE === "sub-start") {
     const { repoRoot, branch } = ctx();
     ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch, task: input.agent_type || "subagent",

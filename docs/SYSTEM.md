@@ -192,12 +192,21 @@ Data model: see `lib/store.mjs` `SCHEMA`. Key tables — `agents` (id, tool, pid
 repo, branch, task, status, last_heartbeat), `file_leases` (workspace_id, path,
 agent_id, mode, expires_at), `resource_leases`, `lease_queue` (block-time waiter
 rows, drained by `freedFileWaits` for the freed-file notify), `activity_log`,
-`messages` (workspace-scoped agent-to-agent mailbox) + `message_reads` (per-agent
-read pointer), `tasks` (workspace-scoped shared task board — owner, status,
+`messages` (workspace-scoped broadcasts plus cross-room directed bodies),
+`message_reads` (legacy per-agent read pointer), `reliable_messages` (separate
+rolling-compatible directed-message lane: UUID, digest, one bounded delivery
+attempt and sender-visible state; `directed_message current` and
+`cli/reliable-current.mjs` expose its read-only queue head), `tasks` (workspace-scoped shared task board — owner, status,
 `depends_on`, `summary` handoff, `priority`), `decisions` (workspace-scoped
 decision log, latest per topic), `issues` (**cross-project**, durable incident
 log — origin tags `workspace_id`/`repo_path`/`project`, `severity`, `kind`,
 `status`, `resolution`; surveyed machine-wide, never auto-expires).
+
+Reliable message bodies are local plaintext, hidden after their 7-day expiry
+and cleared by opportunistic reaping. Compact terminal receipts are retained for
+at least 30 days. The current-pointer CLI is read-only, but any process running
+as the same OS user can invoke it; this store is coordination, not a secrets or
+authentication boundary.
 
 **Scope boundary:** the store is one SQLite file per machine, so everything
 above — including `scope:'global'` messages — reaches only agents on **this**
@@ -228,10 +237,11 @@ cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 setup.mjs                       # (re)install everything, idempotent, any OS (setup.ps1 = Windows + VS Code panel)
 ```
 
-MCP tools (28, in Claude + Codex): whoami, announce_intent, list_active_agents,
+MCP tools (30, in Claude + Codex): whoami, announce_intent, list_active_agents,
 get_global_state, check_conflicts, claim_files (returns a `hotspot` warning on
 known multi-agent files), release_files, claim_resource, release_resource,
-log_activity, post_message, read_messages, pending_push_review, ask_agent,
+log_activity, post_message, read_messages, post_directed_message,
+directed_message, pending_push_review, ask_agent,
 check_replies, reply, request_yield, query_history, list_tasks, claim_task,
 claim_next_task, update_task, record_decision, list_decisions, search
 (FTS5 full-text over messages/decisions/tasks/issues — `lib/search.mjs`; one virtual

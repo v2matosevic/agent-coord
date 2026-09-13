@@ -112,10 +112,22 @@ try {
   assert.equal(otherMe.workspace, workspaceId(other));
   assert.equal((await call("whoami", { _coord: a })).workspace, ws, "workspace does not leak between requests");
   // Test messages stay in this disposable store, never reach real agents.
-  await call("post_message", { _coord: b, to: idA, body: "peer integration ready" });
+  const queued = await call("post_directed_message", { _coord: b, to: idA, body: "peer integration ready", message_id: "ed14da71-b437-4c94-8db2-c54274f07792" });
+  assert.equal(queued.state, "pending");
+  const current = await call("directed_message", { _coord: a, action: "current" });
+  assert.equal(current.current.message_id, queued.message_id);
+  assert.equal(current.current.body, "peer integration ready");
   const delivered = good(hook(a, "PostToolUse", { tool_name: "Bash", tool_input: { command: "git status" } }));
   assert.match(delivered.hookSpecificOutput.additionalContext, /peer integration ready/);
-  assert.equal(good(hook(a, "PostToolUse", { tool_name: "Bash" })), null, "message delivered once");
+  assert.equal((await call("directed_message", { _coord: b, action: "status", message_id: queued.message_id })).state, "offered");
+  const attempt = db.prepare("SELECT attempt_id FROM reliable_messages WHERE message_id=?").get(queued.message_id).attempt_id;
+  await call("directed_message", { _coord: a, action: "ack", message_id: queued.message_id, attempt_id: attempt, payload_sha256: queued.payload_sha256 });
+  const afterAck = good(hook(a, "PostToolUse", { tool_name: "Bash" }));
+  assert.doesNotMatch(afterAck?.hookSpecificOutput?.additionalContext || "", /peer integration ready/, "confirmed message does not replay");
+  const receipt = await call("directed_message", { _coord: b, action: "status", message_id: queued.message_id });
+  assert.equal(receipt.state, "confirmed");
+  assert.equal(receipt.confirmed_via, "explicit-ack");
+  assert.equal(receipt.body, "peer integration ready");
   assert.equal((await call("read_messages", { _coord: away })).messages.length, 0);
   // No ambient MCP-server identity may authorize a different hook thread's push.
   const malformed = await client.callTool({ name: "whoami", arguments: { _coord: { cwd: work } } });

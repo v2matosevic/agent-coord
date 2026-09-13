@@ -2,7 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
-import { agentIdFromSession, agentIdFromEnv, isClaudeChild, sessionIdFromEnv } from "../lib/identity.mjs";
+import { agentIdFromSession, agentIdFromEnv, isClaudeChild, sessionIdFromEnv, sessionTokenFromId } from "../lib/identity.mjs";
 import { gitContext } from "../lib/git-context.mjs";
 import { getDb } from "../lib/store.mjs";
 import { ensureAgent, ensureAgentContext, heartbeat, keepAlive, setIntent, markDead } from "../lib/agents.mjs";
@@ -10,7 +10,7 @@ import { findAgentPid } from "../lib/proc-ancestry.mjs";
 import { pruneExitedAgents, processRunning } from "../lib/liveness.mjs";
 import { claimFile, releaseFile, claimResource, releaseResource, releaseAllForAgent, peekConflicts } from "../lib/leases.mjs";
 import { logActivity, getFleet, getGlobalState } from "../lib/activity.mjs";
-import { postMessage, readMessages, findReplies, annotateSenders } from "../lib/messages.mjs";
+import { postMessage, postReliableMessage, receiveReliableMessages, acknowledgeReliableMessages, reliableMessageStatus, currentReliableMessage, readMessages, findReplies, annotateSenders } from "../lib/messages.mjs";
 import { buildRoomBrief } from "../lib/room-brief.mjs";
 import { MSG_READ_MAX, STATE_LIST_MAX, HB_THROTTLE_MS } from "../lib/config.mjs";
 import { codexContext } from "../lib/codex-context.mjs";
@@ -126,6 +126,7 @@ process.on("exit", cleanup);
 const ok = (obj) => ({ content: [{ type: "text", text: JSON.stringify(obj) }] });
 function handle(name, a, context) {
   const { agentId, tool, repoRoot, branch, ws, cwd, basis, adopted, anchorPids, sessionId } = context;
+  const deliveryToken = sessionTokenFromId(agentId);
   const canon = (p) => canonicalFilePath(p, repoRoot);
   switch (name) {
     case "whoami": {
@@ -189,6 +190,27 @@ function handle(name, a, context) {
     case "post_message":
       postMessage(db, { fromAgent: agentId, workspaceId: ws, body: a.body, toAgent: a.to || null, scope: a.scope || "workspace" });
       return { ok: true };
+    case "post_directed_message":
+      return { ok: true, ...postReliableMessage(db, {
+        messageId: a.message_id, fromAgent: agentId, workspaceId: ws, body: a.body, toAgent: a.to,
+      }) };
+    case "directed_message":
+      if (a.action === "receive") return { messages: receiveReliableMessages(db, {
+        agentId, sessionToken: deliveryToken, limit: a.limit || MSG_READ_MAX,
+      }) };
+      if (a.action === "ack") {
+        if (!a.message_id || !a.attempt_id || !a.payload_sha256) throw new Error("directed_message ack requires message_id, attempt_id and payload_sha256");
+        return { ok: true, confirmed: acknowledgeReliableMessages(db, {
+          agentId, sessionToken: deliveryToken,
+          acknowledgements: [{ message_id: a.message_id, attempt_id: a.attempt_id, payload_sha256: a.payload_sha256 }],
+        }) };
+      }
+      if (a.action === "status") {
+        if (!a.message_id) throw new Error("directed_message status requires message_id");
+        return reliableMessageStatus(db, { agentId, messageId: a.message_id });
+      }
+      if (a.action === "current") return { current: currentReliableMessage(db, { recipientAgent: agentId }) };
+      throw new Error(`unknown directed_message action: ${a.action}`);
     case "read_messages": {
       // Annotate each message with whether its sender is still live (BUG 2): the
       // backlog can span hours and prior sessions, so a sender is frequently an

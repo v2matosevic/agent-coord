@@ -3,7 +3,7 @@
 // so threads sharing a transport never rename one another.
 
 // Keep the first 512 characters useful when a host truncates server guidance.
-export const INSTRUCTIONS = "Machine-wide coordination for agents sharing files and resources. Start with announce_intent: one call returns identity, peers, board, decisions and mail counts. Without trusted native hooks, claim_files before each edit and poll read_messages. Locks self-heal; never force-release a live peer or ask the human to unlock. Use post_message/reply for peers, claim_resource for shared services, pending_push_review before pushing peer commits. Search prior work; record_decision pins choices. Board tools hand off tasks; report_issue logs bugs and friction.";
+export const INSTRUCTIONS = "Machine-wide coordination for agents sharing files and resources. Start with announce_intent: one call returns identity, peers, board, decisions and mail counts. Without trusted native hooks, claim_files before each edit and poll read_messages. Locks self-heal; never force-release a live peer or ask the human to unlock. Use post_directed_message for reliable handoff; post_message/reply for lightweight chat. Claim shared services and run pending_push_review before peer commits. Search prior work; record_decision pins choices; report_issue logs friction.";
 
 const strArr = { type: "array", items: { type: "string" } };
 
@@ -15,8 +15,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "announce_intent",
-    description:
-      "Start here: one call returns identity, peers, board, decisions and unread-mail counts in brief, plus task overlaps. If a live peer started the same work first, narrow your lane or hand off.",
+    description: "Start here: identity, peers, board, decisions, mail counts and task overlaps. If a live peer started first, narrow your lane or hand off.",
     inputSchema: { type: "object", properties: { task: { type: "string" } }, required: ["task"] },
   },
   {
@@ -26,17 +25,27 @@ export const TOOL_DEFS = [
   },
   {
     name: "post_message",
-    description: "Message peers. Broadcasts default to this workspace; scope:'global' broadcasts fleet-wide. to:<agent_id> reaches that peer in any repo. Messages expire after 7 days.",
+    description: "Legacy message: workspace broadcast by default; to reaches one agent. Use post_directed_message when receipts matter.",
     inputSchema: { type: "object", properties: { body: { type: "string" }, to: { type: "string" }, scope: { type: "string", enum: ["workspace", "global"] } }, required: ["body"] },
   },
   {
+    name: "post_directed_message",
+    description: "Reliably queue one directed message. Caller must create and reuse the same UUID message_id after an uncertain response.",
+    inputSchema: { type: "object", properties: { message_id: { type: "string" }, to: { type: "string" }, body: { type: "string" } }, required: ["message_id", "to", "body"] },
+  },
+  {
+    name: "directed_message",
+    description: "Receive, acknowledge, or inspect reliable mail. current is a read-only queue head; ack needs message_id, attempt_id and payload_sha256.",
+    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["receive", "ack", "status", "current"] }, message_id: { type: "string" }, attempt_id: { type: "string" }, payload_sha256: { type: "string" }, limit: { type: "number" } }, required: ["action"] },
+  },
+  {
     name: "read_messages",
-    description: "Read and mark returned inbox messages read; remaining reports the backlog. Includes direct messages across repos, broadcasts during your session, and older broadcasts from live peers. Other history stays in search. from_live:false means the sender exited, not that the message is irrelevant. Trusted hooks deliver mail; poll when hooks are absent or pending mail is needed.",
+    description: "Read the legacy inbox; remaining is exact. from_live:false means the sender exited. Reliable directed mail uses directed_message.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "get_global_state",
-    description: "Fleet snapshot: agents, file/resource leases, queue, tasks and recent activity. Lists are capped with a note when clipped; check_conflicts/list_tasks give scoped detail.",
+    description: "Fleet snapshot: agents, leases, queue, tasks and recent activity. Capped lists say when clipped.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -60,12 +69,12 @@ export const TOOL_DEFS = [
   },
   {
     name: "claim_resource",
-    description: "Claim a shared singleton before use. Give the same OS service one machine-wide id, e.g. 'port:3000'. Shell guards scope deployments/migrations per repo; use a shared id such as 'deploy:prod-host' when repos target the same service.",
+    description: "Claim a shared singleton before use: machine-wide e.g. port:3000, or a shared workspace/deploy key.",
     inputSchema: { type: "object", properties: { resource_id: { type: "string" }, reason: { type: "string" } }, required: ["resource_id"] },
   },
   {
     name: "release_resource",
-    description: "Release a resource lease YOU hold. Returns released:false + heldBy when the lease is a peer's (it frees when they release or go silent) — never treat that as released.",
+    description: "Release your resource lease. A peer's lease returns released:false + heldBy; never treat that as released.",
     inputSchema: { type: "object", properties: { resource_id: { type: "string" } }, required: ["resource_id"] },
   },
   {
@@ -75,7 +84,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "pending_push_review",
-    description: "Review unpushed commits before pushing peer work: authors, liveness and blockers. Returns the inspected repo/branch/upstream. For a nested checkout pass repo:<path inside it>; otherwise uses this server's cwd. Inspect the verdict before pushing.",
+    description: "Review unpushed peer commits, liveness and blockers. Pass repo for a nested checkout; inspect verdict before push.",
     inputSchema: { type: "object", properties: { repo: { type: "string", description: "path inside the git repo to review (default: this session's repo)" } } },
   },
   {
@@ -95,8 +104,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "request_yield",
-    description:
-      "Ask a peer to stand down when you started duplicated work first or hold the verified result. If they agree they release files and stop. Never force-release their locks.",
+    description: "Ask a duplicate worker to stand down. If they agree, they release files and stop; never force-release peer locks.",
     inputSchema: { type: "object", properties: { to: { type: "string" }, reason: { type: "string" } }, required: ["to"] },
   },
   {
@@ -113,8 +121,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "claim_task",
-    description:
-      "Claim existing task_id or create+claim a deduplicated title. Refuses a live owner. depends_on sets prerequisites; higher priority goes first. Returns completed dependency summaries in handoff.",
+    description: "Claim task_id or create+claim a deduplicated title. Refuses a live owner; supports depends_on and priority.",
     inputSchema: {
       type: "object",
       properties: {
@@ -128,14 +135,12 @@ export const TOOL_DEFS = [
   },
   {
     name: "claim_next_task",
-    description:
-      "Atomically claim the highest-priority ready task in this repo, with completed dependency summaries in handoff. Ready means dependencies done and no live owner. Empty board returns granted:false.",
+    description: "Atomically claim the highest-priority ready task, including completed dependency summaries. Empty board returns granted:false.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "update_task",
-    description:
-      "Update task_id. status:'open' releases it; 'done' should include summary (what changed, where, gotchas) for downstream agents. detail replaces its description.",
+    description: "Update task_id. open releases it; done should include a downstream summary. detail replaces its description.",
     inputSchema: {
       type: "object",
       properties: {
@@ -149,8 +154,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "record_decision",
-    description:
-      "Pin a project choice for current and future peers; broadcast and show it in session briefs. Check list_decisions first. Reusing topic supersedes its previous decision.",
+    description: "Pin a project choice for peers and briefs. Check first; reusing topic supersedes its prior decision.",
     inputSchema: { type: "object", properties: { topic: { type: "string" }, decision: { type: "string" } }, required: ["topic", "decision"] },
   },
   {
@@ -160,8 +164,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "search",
-    description:
-      "Full-text search this repo's messages, decisions, tasks and issues, with ranked highlighted snippets. Check whether work was discussed or built before starting. Use kinds to filter and limit to bound results.",
+    description: "Ranked full-text search across this repo's messages, decisions, tasks and issues. Filter with kinds and limit.",
     inputSchema: {
       type: "object",
       properties: {
@@ -174,8 +177,7 @@ export const TOOL_DEFS = [
   },
   {
     name: "report_issue",
-    description:
-      "Log a bug, friction, build failure or coordination problem for later review. title is required; body should carry repro, error and attempted fixes. Auto-tags repo/agent/branch/time. Durable across projects. Use post_message for live coordination and update_task for handoffs.",
+    description: "Log a durable cross-project bug or coordination problem for later review; include repro and attempted fixes.",
     inputSchema: {
       type: "object",
       properties: {

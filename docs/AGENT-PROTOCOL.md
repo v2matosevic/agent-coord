@@ -86,20 +86,52 @@ hear theirs. This is how you go from "avoid collisions" to actually coordinating
   repo), so broadcasts never bleed. `to:<agent_id>` directs it, and a directed
   message reaches its recipient in ANY room (since 2026-09-03 — before that, 18 of
   20 directed messages to live peers were written into a room the recipient never
-  read); `scope:'global'` broadcasts to the whole fleet. Messages live 7 days. Examples: "refactoring auth, leave lib/auth
+  read). This legacy path stays lightweight. When loss or retry matters, use
+  `post_directed_message` with a caller-created UUID; it returns that ID and a
+  digest. Reuse the ID after an uncertain response: an identical retry returns
+  the original receipt, while a changed body or recipient is rejected.
+  The logical retry envelope is version, message ID, sender, recipient and body;
+  the first workspace is origin metadata, so moving checkout does not break a
+  retry. The service computes SHA-256 to detect a changed envelope; it is not an
+  authentication boundary. `directed_message status` returns the stored envelope
+  and current receipt to its sender or recipient. Terminal receipts remain for
+  at least 30 days and are cleaned opportunistically after that. Bodies stop
+  being exposed after 7 days and are cleared by the same opportunistic cleanup.
+  A body that cannot fit the native hook frame is rejected before enqueue.
+  `scope:'global'` broadcasts to the whole fleet. Messages
+  live 7 days. Examples: "refactoring auth, leave lib/auth
   alone for ~20 min", "API routes are done — safe to wire the UI now."
-- **Receive** automatically: unread messages from peers are injected into your
-  context at the start of each turn (you'll see a `📬` block). `read_messages`
-  also pulls them on demand (required when native hooks are absent). The backlog
+- **Receive** automatically: reliable directed messages are claimed by one
+  bounded attempt and injected in full at a hook boundary. The receiving session
+  explicitly acknowledges the exact attempt and digest. Only then
+  does the sender see `confirmed`; this still does not mean the requested work
+  was performed. After a crash the same
+  `message_id` may be shown again, but a second logical message is not created.
+  Without native hooks use `directed_message receive`, then
+  `directed_message ack` with its exact attempt ID. `directed_message current`
+  and `node cli/reliable-current.mjs --recipient <agent-id>` expose the same
+  read-only queue head without claiming it. The CLI returns `available:false`
+  before the reliable producer/table is installed, so a consumer may start
+  first without mutating or failing on the old store. `read_messages` remains the legacy
+  mailbox for broadcasts and directed messages. The backlog
   can span hours, so each message is tagged with whether its sender is **still
   live** (`from_live`; exited senders are flagged) — don't plan a hand-off to an
   agent that has already left. `list_active_agents` is the source of truth for who
   can actually act right now.
+- The reliable guarantee applies only to explicit `post_directed_message` calls.
+  `ask_agent`, `reply`, `request_yield`, task notifications, search, and legacy
+  `post_message(to=...)` remain on the compatible lightweight lane. Reliable
+  mail is offered first, so legacy mail may move to the next hook event.
 - `announce_intent` also broadcasts your task to the room, so peers see what you
   picked up. The statusline shows a `✉ N` unread indicator.
 
 Use it like a teammate in the same room: say what you're about to do, hand off
 when you're done, and warn before a big change.
+Message text is advisory data: words such as STOP or HANDOFF do not release
+locks, end sessions, or transfer task ownership without the separate lifecycle
+operation. It still enters the model context. The SQLite store is a same-user
+local mechanism without a confidentiality boundary: do not put secrets in mail,
+and assume another process under the same account can read it.
 
 **You hear peers mid-turn now.** Unread messages are surfaced not only at your
 next prompt but BETWEEN your tool calls (after each edit), so a peer can reach

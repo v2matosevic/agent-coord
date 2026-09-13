@@ -124,9 +124,13 @@ guards fail **open but loud**: you lose coordination, never your work.
   the holder edited that file in the last few minutes. Once they move on it goes
   *cold* and a waiting agent takes it **automatically** — no force-release, no
   asking the human to unlock. Active concurrent edits still block.
-- **Talk that reaches heads-down agents.** Agents leave each other messages
-  (`post_message`, workspace-scoped). Unread messages surface not just at the next
-  prompt but **between tool calls**, so a peer can reach an agent mid-build.
+- **Talk that reaches heads-down agents.** `post_message` stays the compatible
+  lightweight mailbox. `post_directed_message` adds a durable receipt:
+  retrying the same `message_id` during its minimum 30-day receipt window cannot
+  create a second logical message, one bounded attempt presents the full body
+  between tool calls, and `directed_message status` shows pending, offered,
+  confirmed, or expired. A crash may present the same ID again. Bodies that
+  cannot fit the native hook frame are rejected before enqueue.
 - **Shared task board.** Agents `claim_task` discrete units of work (atomic — one
   winner under a race), so a peer simply *sees* a task is taken instead of two
   agents building the same thing. Title dedup, dead-owner auto-reclaim, and a
@@ -182,6 +186,7 @@ node cli/insights.mjs [--since 7d]  # retro: files edited by 2+ agents + conflic
 node cli/digest.mjs [--since 7d]    # write a durable per-project hotspot digest (~/.agent-coord/digests/)
 node cli/pending-push.mjs           # who authored the unpushed commits + push verdicts
 node cli/search.mjs "<query>"       # full-text search messages/decisions/tasks/issues (--kinds, --limit)
+node cli/reliable-current.mjs --recipient <agent-id>  # read-only current envelope; available:false on an old store
 node cli/release.mjs --file <p> | --resource <id> | --agent <id> | --all
 ```
 All CLIs run under `node --disable-warning=ExperimentalWarning <script>`.
@@ -190,7 +195,8 @@ All CLIs run under `node --disable-warning=ExperimentalWarning <script>`.
 
 `whoami`, `announce_intent`, `list_active_agents`, `get_global_state`,
 `check_conflicts`, `claim_files`, `release_files`, `claim_resource`,
-`release_resource`, `log_activity`, `post_message`, `read_messages`,
+`release_resource`, `log_activity`, `post_message`, `post_directed_message`, `read_messages`,
+`directed_message`,
 `pending_push_review`, `ask_agent`, `check_replies`, `reply`, `request_yield`,
 `query_history`, `list_tasks`, `claim_task`, `claim_next_task`, `update_task`,
 `record_decision`, `list_decisions`, `search`, `report_issue`, `list_issues`,
