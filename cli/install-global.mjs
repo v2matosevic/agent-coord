@@ -52,6 +52,22 @@ try {
   chmodSync(postTarget, 0o755);
 } catch {}
 
+// commit-msg: stamp `Machine: <name>` so a repo shared between machines shows
+// which one made each commit. Never blocks. Deliberately does NOT chain to a
+// repo-local commit-msg: under a global hooksPath those never ran before this
+// hook existed, and waking them now (commitlint, Gerrit Change-Id) could start
+// rejecting commits that pass today.
+const COMMITMSG = `#!/bin/sh
+# agent-coord global commit-msg (stamp the machine that made the commit), never blocks
+node --disable-warning=ExperimentalWarning "${ROOT}/cli/commit-msg.mjs" "$1" >/dev/null 2>&1
+exit 0
+`;
+const commitMsgTarget = join(dir, "commit-msg");
+writeFileSync(commitMsgTarget, COMMITMSG);
+try {
+  chmodSync(commitMsgTarget, 0o755);
+} catch {}
+
 // pre-push: block wip/* snapshot branches (uncommitted work, force-pushed by
 // machine-sync tooling) from landing on a PUBLIC GitHub remote. Same posture as
 // pre-commit: fail OPEN (only rc=1 blocks), chain to a repo-local pre-push.
@@ -85,7 +101,7 @@ writeFileSync(join(COORD_HOME, "git-hookspath.prior"), prior || "(unset)");
 const posixDir = dir.replace(/\\/g, "/");
 execFileSync("git", ["config", "--global", "core.hooksPath", posixDir]);
 
-console.log("✅ global pre-commit + post-commit + pre-push installed for ALL repos");
+console.log("✅ global pre-commit + commit-msg + post-commit + pre-push installed for ALL repos");
 console.log("   core.hooksPath ->", posixDir);
 console.log("   prior value:", prior || "(unset)", "(saved to git-hookspath.prior)");
 console.log("   revert: git config --global --unset core.hooksPath" + (prior ? `  # was ${prior}` : ""));

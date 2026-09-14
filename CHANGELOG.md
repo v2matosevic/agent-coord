@@ -3,6 +3,25 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## v1.7.1: commits say which machine made them
+
+A repo shared between machines (Athena, between olympus and macbook-air) showed
+every commit under the same author on GitHub, so nobody could tell which machine
+made which.
+
+- New global `commit-msg` hook (`cli/commit-msg.mjs`, written by
+  `cli/install-global.mjs`) appends `Machine: <name>`. The name is the one
+  Hermes enrolled the device under (`machine` in its config.json), falling back
+  to the short hostname; `AGENT_COORD_MACHINE` overrides both.
+- It never blocks, and it stays out of four cases: an empty message (git must
+  still abort it), a message that already names a machine (amend and
+  cherry-pick keep the original), public GitHub repos, and GitHub repos whose
+  visibility is unknown. A missing stamp costs nothing; a stray one in a public
+  repo is permanent.
+- It does not chain to repo-local `commit-msg` hooks. Under the global
+  hooksPath those never ran, and waking them could start rejecting commits.
+- Re-run `node cli/install-global.mjs` on each machine to pick it up.
+
 ## v1.7.0 — the payoff is visible: ROI counters, digest auto-run, dashboard insights
 
 The system logged every save it made and showed none of them. This release
