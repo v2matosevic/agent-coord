@@ -116,7 +116,9 @@ All commands run as `node --disable-warning=ExperimentalWarning "$AGENT_COORD/<s
 `git config --global core.hooksPath %USERPROFILE%/.agent-coord/githooks`. Three
 hooks, all **fail open** (only rc=1 blocks) and all **chain** to any repo-local
 hook (skipping our own): `pre-commit` (`cli/precommit-check.mjs` — the
-cross-agent commit net), `post-commit` (provenance logging, never blocks), and
+cross-agent commit net), `commit-msg` (`cli/commit-msg.mjs`, stamps a
+`Machine: <name>` trailer; never blocks, skips public repos, and is the one
+hook that does NOT chain), `post-commit` (provenance logging, never blocks), and
 `pre-push` (`cli/prepush-check.mjs` — blocks `wip/*` snapshot branches of
 uncommitted work from reaching a PUBLIC GitHub remote; deletions exempt;
 `AGENT_COORD_ALLOW_PUBLIC_WIP=1` overrides). Prior value saved to

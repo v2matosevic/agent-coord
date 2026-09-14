@@ -30,7 +30,7 @@ node setup.mjs
 This is idempotent and fail-soft. It will:
 1. `npm install` (only the MCP server needs deps).
 2. Install Claude Code hooks + statusline into `~/.claude/settings.json` (merged, backed up — never clobbers existing hooks).
-3. Install a **global** git pre-commit/post-commit net via `git config --global core.hooksPath` (fails open; chains to existing repo hooks).
+3. Install a **global** git pre-commit/post-commit net via `git config --global core.hooksPath` (fails open; chains to existing repo hooks), plus a `commit-msg` hook that stamps `Machine: <name>` on commits in non-public repos.
 4. Install Codex lifecycle/file/message hooks into `~/.codex/hooks.json` (or `$CODEX_HOME`), preserving existing handlers, and register MCP with available CLIs.
 5. Run the health check.
 
