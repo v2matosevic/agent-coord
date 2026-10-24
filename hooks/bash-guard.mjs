@@ -31,7 +31,8 @@ function readInput() {
 }
 
 const input = readInput();
-beginHookHealth("claude-code", input, { event: "PreToolUse" });
+const hookTool = process.env.AGENT_COORD_HOOK_TOOL === "kimi-code" ? "kimi-code" : "claude-code";
+beginHookHealth(hookTool, input, { event: "PreToolUse" });
 // Subagent shell edits: inherit the parent session's base name (see session-link).
 const parentBase = input?.agent_id ? parentBaseFromProc(process.ppid) : null;
 const agentId = resolveAgentId(input, { parentBase });
@@ -46,7 +47,7 @@ try {
   bindHealthContext({ agentId, ws });
   // Fires on every shell call — skip the upsert write txn while the local
   // heartbeat marker is fresh (see guard.mjs / lib/agents.mjs).
-  if (!heartbeatFresh(agentId)) ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
+  if (!heartbeatFresh(agentId)) ensureAgent(db, { agentId, tool: hookTool, repoPath: repoRoot, branch });
 
   const isCommit = /\bgit\s+commit\b/.test(command);
   if (isCommit) writeCommitterMarker(repoRoot, agentId);

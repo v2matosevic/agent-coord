@@ -15,7 +15,7 @@ import { midTurnContext } from "../lib/coord-context.mjs";
 import { buildRoomBrief } from "../lib/room-brief.mjs";
 import { workspaceId } from "../lib/path-canon.mjs";
 import { reap } from "../lib/reaper.mjs";
-import { findClaudePid } from "../lib/proc-ancestry.mjs";
+import { findClaudePid, findAgentPid } from "../lib/proc-ancestry.mjs";
 import { writeSessionLink, cachedClaudePid, parentBaseFromProc, readSessionLinkMeta } from "../lib/session-link.mjs";
 import { beginHookHealth, bindHealthContext } from "../lib/runtime-health.mjs";
 
@@ -45,7 +45,9 @@ function readInput() {
 }
 
 const input = readInput();
-beginHookHealth("claude-code", input, { event: {
+const hookTool = process.env.AGENT_COORD_HOOK_TOOL === "kimi-code" ? "kimi-code" : "claude-code";
+const kimiOwnerPid = hookTool === "kimi-code" ? findAgentPid(process.ppid, 12, /^(?:kimi|kimi-code)(?:\.exe)?$/i) : null;
+beginHookHealth(hookTool, input, { event: {
   register: "SessionStart", prompt: "UserPromptSubmit", "sub-start": "SubagentStart", "sub-stop": "SubagentStop", release: "SessionEnd",
 }[MODE] });
 // Subagent events: pin the base to the parent session's claimed name (via the
@@ -64,7 +66,7 @@ const parentBase = input?.agent_id ? parentBaseFromProc(process.ppid) : null;
 // can't resurrect an exited agent's identity.
 let claudePidNow = null;
 let retained = null;
-if (MODE === "register" && !input?.agent_id && input?.session_id && input?.source && input.source !== "startup") {
+if (hookTool === "claude-code" && MODE === "register" && !input?.agent_id && input?.session_id && input?.source && input.source !== "startup") {
   try {
     claudePidNow = findClaudePid(process.ppid);
     const prev = readSessionLinkMeta(claudePidNow);
@@ -90,8 +92,8 @@ try {
 
   if (MODE === "register") {
     const { repoRoot, branch } = ctx();
-    ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch, pid: process.ppid,
-      ownerPid: Number(process.env.CLAUDE_PID) || claudePidNow || findClaudePid(process.ppid) });
+    ensureAgent(db, { agentId, tool: hookTool, repoPath: repoRoot, branch, pid: hookTool === "kimi-code" ? kimiOwnerPid : process.ppid,
+      ownerPid: hookTool === "kimi-code" ? kimiOwnerPid : Number(process.env.CLAUDE_PID) || claudePidNow || findClaudePid(process.ppid) });
     logActivity(db, { agentId, workspaceId: workspaceId(repoRoot), event: "register", detail: repoRoot });
     reap(db);
     // Publish claude.exe -> our id so this session's stdio MCP server adopts the
@@ -100,8 +102,10 @@ try {
     // session's new MCP server (parented by the new pid) finds no link and stays a
     // standalone twin. Re-resolving costs one process-walk per SessionStart (rare).
     try {
+      if (hookTool === "claude-code") {
       const pids = new Set([Number(process.env.CLAUDE_PID) || null, cachedClaudePid(input.session_id), claudePidNow || findClaudePid(process.ppid)].filter(Boolean));
       for (const pid of pids) writeSessionLink(pid, agentId, input.session_id);
+      }
     } catch {}
     if (retained) logActivity(db, { agentId, workspaceId: workspaceId(repoRoot), event: "identity-retain", detail: input.source });
     // Room brief: SessionStart stdout lands in context, so the agent arrives
@@ -130,7 +134,7 @@ try {
     } catch {}
   } else if (MODE === "prompt") {
     const { repoRoot, branch } = ctx();
-    ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
+    ensureAgent(db, { agentId, tool: hookTool, repoPath: repoRoot, branch });
     // A host harness may prefix the prompt with context that is not the task
     // (Hephaestus: "[Hephaestus] Local time: … Treat this as the current moment;
     // it is host context…"). Recorded verbatim, that preamble was every ADE
@@ -151,7 +155,7 @@ try {
     if (ctxText) process.stdout.write(ctxText + "\n");
   } else if (MODE === "sub-start") {
     const { repoRoot, branch } = ctx();
-    ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch, task: input.agent_type || "subagent",
+    ensureAgent(db, { agentId, tool: hookTool, repoPath: repoRoot, branch, task: input.agent_type || "subagent",
       ownerPid: Number(process.env.CLAUDE_PID) || findClaudePid(process.ppid) });
     logActivity(db, { agentId, workspaceId: workspaceId(repoRoot), event: "subagent-start", detail: input.agent_type });
   } else {

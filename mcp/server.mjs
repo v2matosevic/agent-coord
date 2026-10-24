@@ -47,7 +47,7 @@ const argFlag = (f) => {
 // identity: the two-ids-one-session split behind i-647f5cc1 / i-71ffc7b0 /
 // i-a7a120fb / i-d0793813. Claude Code exports CLAUDECODE=1 + the session id to
 // every child, so being Claude's child is detected, never declared.
-const tool = argFlag("--tool") || (sessionIdFromEnv(process.env, "codex") ? "codex" : isClaudeChild() ? "claude-code" : "mcp-agent");
+const tool = argFlag("--tool") || (process.env.AGENT_COORD_TOOL === "kimi-code" ? "kimi-code" : sessionIdFromEnv(process.env, "codex") ? "codex" : isClaudeChild() ? "claude-code" : "mcp-agent");
 const cwd = process.cwd();
 const { repoRoot, branch } = gitContext(cwd);
 const ws = workspaceId(repoRoot);
@@ -91,6 +91,10 @@ if (tool === "codex") {
   agentId = agentIdFromEnv(process.env, "codex");
   if (agentId) basis = "env";
 }
+if (tool === "kimi-code") {
+  agentId = agentIdFromEnv(process.env, tool);
+  if (agentId) basis = "env";
+}
 if (!agentId) agentId = agentIdFromSession(randomUUID());
 
 // Hookless clients register on first use. Merely opening an MCP connection
@@ -111,7 +115,7 @@ function cleanup() {
   // (Codex / no hooks) cleans up its own identity.
   // An env identity may be shared by overlapping reconnects. Let its heartbeat
   // expire, or its native SessionEnd release it; one transport cannot end it.
-  if (adopted || usingHookContext || (tool === "codex" && basis === "env")) return;
+  if (adopted || usingHookContext || (["codex", "kimi-code"].includes(tool) && basis === "env")) return;
   try {
     releaseAllForAgent(db, agentId);
     markDead(db, agentId);

@@ -31,7 +31,8 @@ function readInput() {
 }
 
 const input = readInput();
-beginHookHealth("claude-code", input, { event: input.hook_event_name || (POST ? "PostToolUse" : "PreToolUse") });
+const hookTool = process.env.AGENT_COORD_HOOK_TOOL === "kimi-code" ? "kimi-code" : "claude-code";
+beginHookHealth(hookTool, input, { event: input.hook_event_name || (POST ? "PostToolUse" : "PreToolUse") });
 // Subagent edits: inherit the parent session's base name (see session-link),
 // so a subagent's file claims and overlap checks belong to its parent's family
 // instead of a separate phantom session.
@@ -50,7 +51,7 @@ try {
   // shared store) while the local heartbeat marker is fresh — the row exists
   // and is at most HB_THROTTLE_MS stale. ensureAgent itself refreshes the
   // marker, so a stale/missing marker self-heals on the next event.
-  if (!heartbeatFresh(agentId)) ensureAgent(db, { agentId, tool: "claude-code", repoPath: repoRoot, branch });
+  if (!heartbeatFresh(agentId)) ensureAgent(db, { agentId, tool: hookTool, repoPath: repoRoot, branch });
 
   if (POST) {
     // Shell calls (Bash/PowerShell) ride this hook too, with no file_path —
