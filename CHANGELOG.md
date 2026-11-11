@@ -3,6 +3,26 @@
 Notable changes to `agent-coord`. Dates are when the work landed; this is a
 single-user tool with trunk-based history, so entries map to themes, not semver.
 
+## Unreleased: the unread check searches an index (2026-11-11)
+
+Every hook event asks "any unread mail for this agent?", and so does anything
+that polls the store from outside, such as a cockpit waking idle agents. The
+mailbox had no index on the recipient, so the check walked it from the agent's
+read pointer, and an agent without a pointer yet (every fresh session) walked
+all seven days of it on every event.
+
+- New index `idx_messages_to` on `messages(to_agent, seq)`. Both lanes of the
+  unread predicate (addressed to me, or a broadcast) and the reply lookup now
+  search it. Measured on a copy of a live store holding 3,840 messages, for 13
+  agents: unread probe 9.4 MB of page reads down to 1.0 MB, reply lookup
+  40 MB down to 0.2 MB, and the same answers in the same order in all 40
+  comparisons.
+- Additive, no schema version bump. An existing store gains the index the
+  first time a process with this checkout opens it; older long-running servers
+  keep working and benefit as well.
+- `test/message-inbox-index.mjs` pins the plan, the delivered messages and the
+  upgrade of a store that lacks the index.
+
 ## Unreleased: commits say which machine made them (2026-09-14)
 
 A repo shared between machines (Athena, between olympus and macbook-air) showed
