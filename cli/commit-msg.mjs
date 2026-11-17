@@ -1,4 +1,7 @@
-// Global commit-msg body. Two jobs:
+// Global commit-msg body. Three jobs (0 runs first):
+//
+// 0. Remove AI attribution lines (Co-Authored-By: Claude etc.), Marko's hard
+//    rule; see lib/attribution.mjs. AGENT_COORD_KEEP_AI_ATTRIBUTION=1 skips it.
 //
 // 1. Stamp `Machine: <name>` on each commit so a repo shared between machines
 //    shows which one made it (GitHub renders the trailer on the commit page;
@@ -13,7 +16,8 @@
 //    ~/.agent-coord/verification.jsonl (lib/verification.mjs). Only in enforce
 //    mode, and only for an agent's commit, a missing stamp exits 1 (refused).
 //    Every other failure exits 0: the gate fails open.
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { stripAiAttribution } from "../lib/attribution.mjs";
 import { execFileSync } from "node:child_process";
 import { machineName, isEmptyMessage } from "../lib/machine.mjs";
 import { parseGitHubRepo, isPublicGitHubRemote } from "../lib/public-remote.mjs";
@@ -52,6 +56,17 @@ const file = process.argv[2];
 let text = "";
 try {
   text = file ? readFileSync(file, "utf8") : "";
+} catch {}
+
+// 0. Remove AI attribution lines (lib/attribution.mjs). Never blocks.
+try {
+  if (file && process.env.AGENT_COORD_KEEP_AI_ATTRIBUTION !== "1") {
+    const { text: cleaned, removed } = stripAiAttribution(text);
+    if (removed) {
+      writeFileSync(file, cleaned);
+      text = cleaned;
+    }
+  }
 } catch {}
 
 try {
