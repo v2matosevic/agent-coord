@@ -116,9 +116,16 @@ All commands run as `node --disable-warning=ExperimentalWarning "$AGENT_COORD/<s
 `git config --global core.hooksPath %USERPROFILE%/.agent-coord/githooks`. Three
 hooks, all **fail open** (only rc=1 blocks) and all **chain** to any repo-local
 hook (skipping our own): `pre-commit` (`cli/precommit-check.mjs` — the
-cross-agent commit net), `commit-msg` (`cli/commit-msg.mjs`, stamps a
-`Machine: <name>` trailer; never blocks, skips public repos, and is the one
-hook that does NOT chain), `post-commit` (provenance logging, never blocks), and
+cross-agent commit net), `commit-msg` (`cli/commit-msg.mjs`, the one
+hook that does NOT chain: strips AI attribution lines such as
+`Co-Authored-By: Claude` (`lib/attribution.mjs`, human co-authors kept,
+`AGENT_COORD_KEEP_AI_ATTRIBUTION=1` skips), stamps a `Machine: <name>` trailer
+(skips public repos), and logs the `Verified: <how>` trailer verdict to
+`~/.agent-coord/verification.jsonl` (`lib/verification.mjs`). The verification
+gate defaults to observe mode and blocks nothing; in enforce mode it refuses an
+agent commit with no stamp (humans, merges, rebases, `wip/*` exempt; the third
+attempt in 30 min passes as escaped). Report and mode switch:
+`node cli/verify-report.mjs [--days N] [--repo X] [--mode off|observe|enforce]`), `post-commit` (provenance logging, never blocks), and
 `pre-push` (`cli/prepush-check.mjs` — blocks `wip/*` snapshot branches of
 uncommitted work from reaching a PUBLIC GitHub remote; deletions exempt;
 `AGENT_COORD_ALLOW_PUBLIC_WIP=1` overrides). Prior value saved to
