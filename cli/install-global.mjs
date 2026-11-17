@@ -53,13 +53,18 @@ try {
 } catch {}
 
 // commit-msg: stamp `Machine: <name>` so a repo shared between machines shows
-// which one made each commit. Never blocks. Deliberately does NOT chain to a
-// repo-local commit-msg: under a global hooksPath those never ran before this
-// hook existed, and waking them now (commitlint, Gerrit Change-Id) could start
-// rejecting commits that pass today.
+// which one made each commit, and log the `Verified:` trailer verdict
+// (lib/verification.mjs). Blocks only in enforce mode, only an agent commit
+// with no stamp (rc=1); stderr is kept so that refusal is readable. Every
+// other outcome, including a crash, lets the commit through. Deliberately does
+// NOT chain to a repo-local commit-msg: under a global hooksPath those never
+// ran before this hook existed, and waking them now (commitlint, Gerrit
+// Change-Id) could start rejecting commits that pass today.
 const COMMITMSG = `#!/bin/sh
-# agent-coord global commit-msg (stamp the machine that made the commit), never blocks
-node --disable-warning=ExperimentalWarning "${ROOT}/cli/commit-msg.mjs" "$1" >/dev/null 2>&1
+# agent-coord global commit-msg (machine stamp + verification stamp gate)
+node --disable-warning=ExperimentalWarning "${ROOT}/cli/commit-msg.mjs" "$1" >/dev/null
+rc=$?
+[ "$rc" = "1" ] && exit 1
 exit 0
 `;
 const commitMsgTarget = join(dir, "commit-msg");
